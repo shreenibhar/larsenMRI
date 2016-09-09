@@ -2,3 +2,5 @@ Results/
 data/
 .*
 *.out
+*.csv
+*.txt

@@ -22,8 +22,8 @@ double  eps = pow(10, -6);
 
 ofstream f, o, r;
         f.open("QBeta.csv", ios::out | ios::app);
-        o.open("QStep.txt", ios::out | ios::app);
-        r.open("QRess.txt", ios::out | ios::app);
+        o.open("QStep.csv", ios::out | ios::app);
+        r.open("QRess.csv", ios::out | ios::app);
 
         o << actingModel << ',' << u_step[bufferModel]-1 << '\n';
         r << actingModel << ',' << 1-u_upper1[bufferModel] << '\n';
