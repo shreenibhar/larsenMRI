@@ -10,6 +10,17 @@ struct dMatrix{
 double *dmatrix;
 int    M, N;
 };
+//Remove used files.
+int removeUsedFiles(){
+ofstream f, o, r;
+	f.open("QBeta.csv", ios::out);
+        o.open("QStep.csv", ios::out);
+        r.open("QRess.csv", ios::out);
+	f.close();
+	o.close();
+	r.close();
+	return 0;
+}
 /*
 Handles universal device pointers.
 Fuction to write u_beta as csv file, u_upper1 and u_step as csv file.

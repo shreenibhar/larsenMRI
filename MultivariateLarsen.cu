@@ -80,6 +80,8 @@ int freeAll(double *&d_new1, double *&d_new, double *&d_G, double *&d_I, double 
 }
 
 int main(int argc, char *argv[]){
+//Delete files used in the code if already existing.
+	removeUsedFiles();
 //Reading flattened MRI image.
 dMatrix d_mat = readFlatMRI(argv[argc - 1]);
 int     M = d_mat.M, Z = d_mat.N, i;
