@@ -1,4 +1,4 @@
-function [b,steps,G,a2,error,drop] = larsenc(X, y, g)
+function [b,steps,G,a2,error,drop] = larsen(X, y, g)
 %LARSEN The LARS-EN algorithm for estimating Elastic Net solutions.
 %
 %   BETA = LARSEN(X, Y, DELTA, STOP, GRAM, STOREPATH, VERBOSE) evaluates

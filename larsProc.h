@@ -15,7 +15,7 @@ act is the list of current evaluating models and l is the buffer size.
 g is the lars pruning variable.
 */
 int lars(double *&d_X, double *&d_Y, double *&d_mu, double *&d_c, double *&d_, double *&d_G, double *&d_I, double *&d_beta, double *&d_betaOLS, double *&d_d, double *&d_gamma, double *&d_cmax, double *&d_upper1, double *&d_normb, int *&d_lVars, int *&d_nVars, int *&d_ind, int *&d_step, int *&d_done, int *&d_lasso, int M, int Z, int *d_act, int l, double g){
-int     n = min(M - 1, Z - 1), i, j, top = 39650;
+int     n = min(M - 1, Z - 1), i, j, top = l;
 
 dim3    bl(1024);
 dim3    gl((l + bl.x - 1) / bl.x);
