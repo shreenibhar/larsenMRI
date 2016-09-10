@@ -11,10 +11,12 @@ After the worker completes the larsen algorithm for that respective model it rem
 ## The model
 The buffer size is determined by calculating remaining memory in the gpu and setting the buffer size such that 90% of the remaining memory is filled. Brief model flow is shown below:
 N is the buffer size.
-![img link](https://drive.google.com/file/d/0B5ecmAaEQOAfdjBXTWdmaTRseG8/view)
+![img link](https://s19.postimg.io/kjwigt82b/larsen_MRIGithub_Repo1.png)
 ## Inside the worker
 Inside each worker the standard larsen code from the earlier mentioned repo gets executed. Some of the important codes executing are:
 Finding correlation and residuals.
+Finding the gram matrix and its inverse parallely.
+The gram inversion is done using the parallelized Gauss Jordan Matrix Inversion algorithm.
 Moving towards OLS solution.
 Adding and removing lasso variables.
 Updating beta, residuals, etc.
