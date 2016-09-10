@@ -9,12 +9,13 @@ using namespace std;
 
 extern int N;
 /*
-X input(M - 1, Z)
-Y output(M - 1, Z)
+X input(M - 1, Z).
+Y output(M - 1, Z).
 act is the list of current evaluating models and l is the buffer size.
+g is the lars pruning variable.
 */
 int lars(double *&d_X, double *&d_Y, double *&d_mu, double *&d_c, double *&d_, double *&d_G, double *&d_I, double *&d_beta, double *&d_betaOLS, double *&d_d, double *&d_gamma, double *&d_cmax, double *&d_upper1, double *&d_normb, int *&d_lVars, int *&d_nVars, int *&d_ind, int *&d_step, int *&d_done, int *&d_lasso, int M, int Z, int *d_act, int l, double g){
-int     n = min(M - 1, Z - 1), i, j, top = l;
+int     n = min(M - 1, Z - 1), i, j, top = 39650;
 
 dim3    bl(1024);
 dim3    gl((l + bl.x - 1) / bl.x);
@@ -69,23 +70,25 @@ int     *d_ctrl;
                 dRess<<<gMl, bMl>>>(d_X, d_Y, d_, d_beta, M, Z, d_act, l, d_done);
                 dFinal<<<gl, bl>>>(d_, d_beta, d_upper1, d_normb, d_nVars, d_step, g, M, Z, l, d_done);
 //Remove completed models and write them to a file and replace them with new models.
-		if(top < Z){
-                        for(j = 0;j < l;j++){
-                                cudaDeviceSynchronize();
-                                if(d_done[j]){
-                                        writeModel(d_beta, d_step, d_upper1, M, Z, d_act[j], j);
+                for(j = 0;j < l && top < Z;j++){
+                	cudaDeviceSynchronize();
+                	if(d_done[j]){
+                		writeModel(d_beta, d_step, d_upper1, M, Z, d_act[j], j);
 //Replace the completed model index in the buffer with model top which is the next model in the stack to be added.
-                                        d_act[j] = top++;
-                                        d_nVars[j] = d_done[j] = d_lasso[j] = 0;
-                                        d_step[j] = 1;
-                                        cudaMemset(d_mu + j * (M - 1), 0, (M - 1) * sizeof(double));
-                                        cudaMemset(d_beta + j * (Z - 1), 0, (Z - 1) * sizeof(double));
-                                        cout << "\rModel stack top at " << top;
-                                        if(top >= Z)break;
-                                }
+                                d_act[j] = top++;
+                                d_nVars[j] = d_done[j] = d_lasso[j] = 0;
+                                d_step[j] = 1;
+                                cudaMemset(d_mu + j * (M - 1), 0, (M - 1) * sizeof(double));
+                                cudaMemset(d_beta + j * (Z - 1), 0, (Z - 1) * sizeof(double));
+                                cout << "\rModel stack top at " << top;
                         }
-                }
+           	}
         }
+	cout << " Clearing the buffer...\n";
+//Write the remaining models in the buffer to clear the buffer.
+	for(j = 0;j < l; j++){
+		writeModel(d_beta, d_step, d_upper1, M, Z, d_act[j], j);
+	}
         cudaFree(d_ctrl);
         return 0;
 }
