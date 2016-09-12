@@ -26,7 +26,8 @@ LarsProc.h is the core larsen file and uses LarsProcKernel.h.
 The *Kernel.h files are files containing the cuda kernels.
 ## Using the code
 Cuda Toolkit >= 6 necessary.
-Nvcc *.cu to generate the executable file.
+Installing the cuda toolkit in linux, sudo apt-get install nvidia-cuda-toolkit.
+nvcc *.cu to generate the executable file.
 ./a.out <path:2dFlattenedMRIimageUsingOctave>
 Example:
 nvcc MultivariateLarsen.cu.
