@@ -93,10 +93,6 @@ double	*d_new1, *d_new;
 dMatrix	*list = procFlatMRI(d_mat);
 	d_new1 = list[0].dmatrix;
 	d_new = list[1].dmatrix;
-//Display time.
-time_t timer;
-	time(&timer);
-	cout << "Code started at " << ctime(&timer) << endl;
 //Initialize all Lars variables.
 double	*d_G, *d_I, *d_mu, *d_d, *d_c, *d_, *d_beta, *d_betaOLS,*d_gamma;
 double  *d_cmax, *d_upper1, *d_normb;
@@ -113,7 +109,5 @@ int	*h_act = new int[N];
 //Clearing all Lars variables.
 	freeAll(d_new1, d_new, d_G, d_I, d_mu, d_d, d_c, d_, d_beta, d_betaOLS, d_gamma, d_cmax, d_upper1, d_normb, d_lVars, d_nVars, d_step, d_ind, d_done, d_lasso, d_act);
 //Time stop.
-	time(&timer);
-	cout << "Code finished at " << ctime(&timer) << endl;
 	return 0;
 }
