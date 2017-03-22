@@ -1,4 +1,4 @@
-function [b,steps,G,a2,error,drop] = larsen(X, y, g)
+function [b,steps,G,a2,error,drop] = larsen(X, y, delta, g)
 %LARSEN The LARS-EN algorithm for estimating Elastic Net solutions.
 %
 %   BETA = LARSEN(X, Y, DELTA, STOP, GRAM, STOREPATH, VERBOSE) evaluates
@@ -25,18 +25,25 @@ function [b,steps,G,a2,error,drop] = larsen(X, y, g)
 %% algorithm setup
 [n p] = size(X);
 % Determine maximum number of active variables
-maxVariables = min(n,p); %LASSO
+if delta < eps
+  maxVariables = min(n,p); %LASSO
+else
+  maxVariables = p; % Elastic net
+end
+
 maxSteps = 8*maxVariables; % Maximum number of algorithm steps
 
 % set up the LASSO coefficient vector
 b = zeros(p, 1);
+b_prev = b;
 
 % current "position" as LARS travels towards lsq solution
 mu = zeros(n, 1);
 
+
 I = 1:p; % inactive set
 A = []; % active set
-R = []; % Cholesky factorization R'R = X'X where R is upper triangular
+
 
 lassoCond = 0; % LASSO condition boolean
 stopCond = 0; % Early stopping condition boolean
@@ -58,7 +65,6 @@ while length(A) < maxVariables && ~stopCond && step < maxSteps
   
   if ~lassoCond 
     % add variable
-    [R] = cholinsert1(R, X(:,cidx), X(:,A), 0);
     A = [A cidx]; % add to active set
     I(cidxI) = []; % ...and drop from inactive set
   else
@@ -69,7 +75,7 @@ while length(A) < maxVariables && ~stopCond && step < maxSteps
 
   % partial OLS solution and direction from current position to the OLS
   % solution of X_A
-  b_OLS = R\(R'\(X(:,A)'*y)); % same as X(:,A)\y, but faster
+  b_OLS = Gram(X,A)\(X(:,A)'*y); % same as X(:,A)\y, but faster
   d = X(:,A)*b_OLS - mu;
   
   % compute length of walk along equiangular direction
@@ -85,19 +91,24 @@ while length(A) < maxVariables && ~stopCond && step < maxSteps
     temp = [ (c(I) - cmax)./(cd(I) - cmax); (c(I) + cmax)./(cd(I) + cmax) ];
     temp = sort(temp(temp > 0)); % faster than min(temp(temp > 0)) (!)
     if isempty(temp)
-      %error('SpaSM:larsen', 'Could not find a positive direction towards the next event.');
-      continue
+        drop = length(A);
+
+        % return number of iterations
+        steps = step - 1;
+        
+        return
     end
     gamma = temp(1);
   end
   
   % check if variable should be dropped
-  if gamma_tilde < gamma,
+  if gamma_tilde < gamma
     lassoCond = 1;
     gamma = gamma_tilde;
   end
     
   % update beta
+  b_prev = b;
   b(A) = b(A) + gamma*(b_OLS - b(A)); % update beta
 
   % update position
@@ -105,15 +116,15 @@ while length(A) < maxVariables && ~stopCond && step < maxSteps
   
   % increment step counter
   step = step + 1;
+  display(step);
+
   
   % If LASSO condition satisfied, drop variable from active set
-  R = choldelete(R, dropIdx); 
   if lassoCond
     I = [I A(dropIdx)]; % add dropped variable to inactive set
     A(dropIdx) = []; % ...and remove from active set
   end
-
-  % Early stopping at specified number of variables
+  
   Y = y;
   Y_new = X*b;
   a1 = norm(b,1);
@@ -122,20 +133,24 @@ while length(A) < maxVariables && ~stopCond && step < maxSteps
       G = -((upper1-a2)/(normb- a1));
       error = a2/norm(Y_new,2);
       if G < g
-          break
+        drop = length(A);
+
+        % return number of iterations
+        steps = step - 1;
+        
+        return
+        
       end
   end
     
     upper1 = a2;
+
     normb = a1;
+
+  
 end
 
 drop = length(A);
 
 % return number of iterations
 steps = step - 1;
-
-% issue warning if algorithm did not converge
-if step == maxSteps
-  warning('SpaSM:larsen', 'Forced exit. Maximum number of steps reached.');
-end
