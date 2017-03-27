@@ -8,7 +8,7 @@ using namespace std;
 
 // Remove last row for new1 and first row for new from d_number.
 __global__
-void d_trim(double *d_number, double *d_new1, double *d_new,
+void d_trim(float *d_number, float *d_new1, float *d_new,
         int M, int Z)
 {
         int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -23,11 +23,11 @@ void d_trim(double *d_number, double *d_new1, double *d_new,
 
 // Normalize data.
 __global__
-void d_proc(double *d_new1, double *d_new, int M, int Z) {
+void d_proc(float *d_new1, float *d_new, int M, int Z) {
         int ind = threadIdx.x + blockIdx.x * blockDim.x;
         int i;
-        double tot1, sum1;
-        double tot, sum;
+        float tot1, sum1;
+        float tot, sum;
 	M -= 1;
         if (ind < Z) {
                 tot1 = tot = 0;
@@ -50,14 +50,14 @@ void d_proc(double *d_new1, double *d_new, int M, int Z) {
                 for (i = 0; i < M; i++) {
                         d_new1[i * Z + ind] /= sum1;
                         d_new[i * Z + ind] /= sum;
-                        tot1 += pow(d_new1[i * Z + ind], 2);
-                        tot += pow(d_new[i * Z + ind], 2);
+                        // tot1 += pow(d_new1[i * Z + ind], 2);
+                        // tot += pow(d_new[i * Z + ind], 2);
                 }
-                tot1 = sqrt(tot1);
-                tot = sqrt(tot);
-                for (i = 0; i < M; i++) {
-                        d_new1[i * Z + ind] /= tot1;
-                        d_new[i * Z + ind] /= tot;
-                }
+                // tot1 = sqrt(tot1);
+                // tot = sqrt(tot);
+                // for (i = 0; i < M; i++) {
+                //         d_new1[i * Z + ind] /= tot1;
+                //         d_new[i * Z + ind] /= tot;
+                // }
         }
 }

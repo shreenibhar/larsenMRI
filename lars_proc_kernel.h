@@ -42,9 +42,9 @@ void d_check(int *d_ctrl, int *d_step, int *d_nVars, int M,
 
 // c = _ = X' * (y - mu).
 __global__
-void d_corr(double *d_X, double *d_Y, double *d_mu,
-	double *d_c, double *d_, int M, int Z, int *d_act,
-	int l, int *d_done, double *d_corr_flop)
+void d_corr(float *d_X, float *d_Y, float *d_mu,
+	float *d_c, float *d_, int M, int Z, int *d_act,
+	int l, int *d_done, float *d_corr_flop)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int	mod = threadIdx.y + blockIdx.y * blockDim.y;
@@ -53,7 +53,7 @@ void d_corr(double *d_X, double *d_Y, double *d_mu,
 			d_corr_flop[mod] += M * Z * 2.0;
 		if (ind < Z - 1) {
 			int	i, act, j;
-			double	tot;
+			float	tot;
 			i = ind;
 			act = d_act[mod];
 			if (i >= act)
@@ -68,7 +68,7 @@ void d_corr(double *d_X, double *d_Y, double *d_mu,
 
 // Exclude Active variables in _.
 __global__
-void d_exc_corr(double *d_, int *d_lVars, int *d_nVars,
+void d_exc_corr(float *d_, int *d_lVars, int *d_nVars,
 	int M, int Z, int l, int *d_done)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -84,13 +84,13 @@ void d_exc_corr(double *d_, int *d_lVars, int *d_nVars,
 
 // Take max(abs(_(I))).
 __global__
-void d_max_corr(double *d_, double *d_cmax, int *d_ind,
+void d_max_corr(float *d_, float *d_cmax, int *d_ind,
 	int Z, int l, int *d_done)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < l && !d_done[ind]) {
 		int	j, maxi;
-		double	max, tot;
+		float	max, tot;
 		maxi = -1;
 		max = -INF;
 		for (j = 0; j < Z - 1; j++) {
@@ -109,7 +109,7 @@ void d_max_corr(double *d_, double *d_cmax, int *d_ind,
 __global__
 void d_lasso_add(int *d_ind, int *d_lVars, int *d_nVars,
 	int *d_lasso, int M, int Z, int l, int *d_done,
-	double *d_add_flop)
+	float *d_add_flop)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < l && !d_done[ind]) {
@@ -120,15 +120,15 @@ void d_lasso_add(int *d_ind, int *d_lVars, int *d_nVars,
 		}
 		else
 			d_lasso[ind] = 0;
-		d_add_flop[ind] += 3 * pow(double(d_nVars[ind]), 2);
+		d_add_flop[ind] += 3 * pow(float(d_nVars[ind]), 2);
 	}
 }
 
 // Compute _ = X(:, A)' * y.
 __global__
-void d_xincty(double *d_X, double *d_Y, double *d_,
+void d_xincty(float *d_X, float *d_Y, float *d_,
 	int *d_lVars, int *d_nVars, int M, int Z, int *d_act,
-	int l, int *d_done, double *d_other_flop)
+	int l, int *d_done, float *d_other_flop)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int	mod = threadIdx.y + blockIdx.y * blockDim.y;
@@ -138,7 +138,7 @@ void d_xincty(double *d_X, double *d_Y, double *d_,
 			if (ind == 0)
 				d_other_flop[mod] += d_nVars[mod] * M * 2;
 			int	i, j, act;
-			double	tot;
+			float	tot;
 			i = d_lVars[mod * n + ind];
 			act = d_act[mod];
 			if (i >= act)
@@ -153,9 +153,9 @@ void d_xincty(double *d_X, double *d_Y, double *d_,
 
 // Compute G = X(:, A)' * X(:, A).
 __global__
-void d_set_gram(double *d_X, double *d_G, double *d_I,
+void d_set_gram(float *d_X, float *d_G, float *d_I,
 	int *d_lVars, int n, int M, int Z, int mod, int *d_act,
-	int l, double *d_other_flop)
+	int l, float *d_other_flop)
 {
 	int	indx = threadIdx.x;
 	int	indy = blockIdx.x;
@@ -163,7 +163,7 @@ void d_set_gram(double *d_X, double *d_G, double *d_I,
 		if (indx == 0 && indy == 0)
 			d_other_flop[0] += n * n * M * 2;
 		int	i, j, k, act;
-		double 	tot;
+		float 	tot;
 		act = d_act[mod];
 		i = d_lVars[mod * min(M - 1, Z - 1) + indx];
 		j = d_lVars[mod * min(M - 1, Z - 1) + indy];
@@ -187,8 +187,8 @@ void d_set_gram(double *d_X, double *d_G, double *d_I,
 
 // Guass jordan functions normalize non-diagnal.
 __global__
-void nodiag_normalize(double *A, double *I, int n, int i,
-	double *d_other_flop)
+void nodiag_normalize(float *A, float *I, int n, int i,
+	float *d_other_flop)
 {
 	int	y = threadIdx.x;
 	if (y < n) {
@@ -203,15 +203,15 @@ void nodiag_normalize(double *A, double *I, int n, int i,
 
 // Guass jordan function normalize diagnal.
 __global__
-void diag_normalize(double *A, double *I, int n, int i) {
+void diag_normalize(float *A, float *I, int n, int i) {
 	I[i * n + i] /= A[i * n + i];
 	A[i * n + i] = 1;
 }
 
 // Guass jordan function row transforms.
 __global__
-void gauss_jordan(double *A, double *I, int n, int i,
-	double *d_other_flop)
+void gauss_jordan(float *A, float *I, int n, int i,
+	float *d_other_flop)
 {
 	int	x = threadIdx.x;
 	int	y = blockIdx.x;
@@ -228,7 +228,7 @@ void gauss_jordan(double *A, double *I, int n, int i,
 
 // Set zero.
 __global__
-void set_zero(double *A, double *I, int n, int i) {
+void set_zero(float *A, float *I, int n, int i) {
 	int x = threadIdx.x;
 	if (x < n)
 		if (x != i)
@@ -237,15 +237,15 @@ void set_zero(double *A, double *I, int n, int i) {
 
 // Compute betaOLS = I * _.
 __global__
-void d_betaols(double *d_I, double *d_, double *d_betaOLS,
-	int n, int mod, int M, int Z, int l, double *d_ols_flop)
+void d_betaols(float *d_I, float *d_, float *d_betaOLS,
+	int n, int mod, int M, int Z, int l, float *d_ols_flop)
 {
 	int	ind = threadIdx.x;
 	if (ind < n) {
 		if (ind == 0)
 			d_ols_flop[mod] += M * 2 * n;
 		int	j;
-		double	tot;
+		float	tot;
 		tot = 0;
 		for (j = 0; j < n; j++)
 			tot += d_I[ind * n + j] * d_[mod * min(M - 1, Z - 1) + j];
@@ -255,17 +255,17 @@ void d_betaols(double *d_I, double *d_, double *d_betaOLS,
 
 // Computing d = X(:, A) * betaOLS and gamma list.
 __global__
-void d_d_gamma(double *d_X, double *d_mu, double *d_beta,
-	double *d_betaOLS, double *d_gamma, double *d_d,
+void d_d_gamma(float *d_X, float *d_mu, float *d_beta,
+	float *d_betaOLS, float *d_gamma, float *d_d,
 	int *d_lVars, int *d_nVars, int M, int Z, int *d_act,
-	int l, int *d_done, double *d_other_flop)
+	int l, int *d_done, float *d_other_flop)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < l && !d_done[mod]) {
 		if (ind < M - 1) {
 			int	i, j, n, act;
-			double	tot;
+			float	tot;
 			n = d_nVars[mod];
 			if (ind == 0)
 				d_other_flop[mod] += M * n * 2 + n * 2;
@@ -291,13 +291,13 @@ void d_d_gamma(double *d_X, double *d_mu, double *d_beta,
 
 // Computing min(gamma(gamma > 0)).
 __global__
-void d_min_gamma(double *d_gamma, int *d_ind, int *d_nVars,
+void d_min_gamma(float *d_gamma, int *d_ind, int *d_nVars,
 	int M, int Z, int l, int *d_done)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < l && !d_done[ind]) {
 		int	j, n, mini, nt = min(M - 1, Z - 1);
-		double	min, tot;
+		float	min, tot;
 		n = d_nVars[ind];
 		min = INF;
 		mini = -1;
@@ -316,9 +316,9 @@ void d_min_gamma(double *d_gamma, int *d_ind, int *d_nVars,
 
 // Computing _ = X' * d and gamma_tilde.
 __global__
-void d_xtd(double *d_X, double *d_c, double *d_,
-	double *d_d, double *d_cmax, int M, int Z, int *d_act,
-	int l, int *d_done, double *d_other_flop)
+void d_xtd(float *d_X, float *d_c, float *d_,
+	float *d_d, float *d_cmax, int M, int Z, int *d_act,
+	int l, int *d_done, float *d_other_flop)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = threadIdx.y + blockIdx.y * blockDim.y;
@@ -327,7 +327,7 @@ void d_xtd(double *d_X, double *d_c, double *d_,
 			if (ind == 0)
 				d_other_flop[mod] += Z * M * 2 + 2 * Z;
 			int	i, act, j;
-			double	tot, cmax, a, b;
+			float	tot, cmax, a, b;
 			cmax = d_cmax[mod];
 			act = d_act[mod];
 			i = ind;
@@ -350,7 +350,7 @@ void d_xtd(double *d_X, double *d_c, double *d_,
 
 // Excluding active variables from gamma_tilde.
 __global__
-void d_exc_tmp(double *d_, int *d_lVars, int *d_nVars,
+void d_exc_tmp(float *d_, int *d_lVars, int *d_nVars,
 	int M, int Z, int l, int *d_done)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -367,11 +367,11 @@ void d_exc_tmp(double *d_, int *d_lVars, int *d_nVars,
 
 // Finding gamma = min(gamma_tilde(gamma_tilde > 0)).
 __global__
-void d_min_tmp(double *d_, int Z, int l, int *d_done) {
+void d_min_tmp(float *d_, int Z, int l, int *d_done) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
    	if (ind < l && !d_done[ind]) {
     	int j;
-        double  min, tot;
+        float  min, tot;
 		min = INF;
         for (j = 0; j < Z - 1; j++) {
             tot = d_[ind * (Z - 1) + j];
@@ -384,7 +384,7 @@ void d_min_tmp(double *d_, int Z, int l, int *d_done) {
 
 // Lasso deviation condition.
 __global__
-void d_lasso_dev(double *d_, double *d_gamma, int *d_nVars,
+void d_lasso_dev(float *d_, float *d_gamma, int *d_nVars,
 	int *d_lasso, int n, int l, int *d_done)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -406,10 +406,10 @@ void d_lasso_dev(double *d_, double *d_gamma, int *d_nVars,
 
 // Updates mu and beta.
 __global__
-void d_update(double *d_gamma, double *d_mu, double *d_beta,
-	double *d_betaOLS, double *d_d, int *d_lVars,
+void d_update(float *d_gamma, float *d_mu, float *d_beta,
+	float *d_betaOLS, float *d_d, int *d_lVars,
 	int *d_nVars, int M, int Z, int l, int *d_done,
-	double *d_other_flop)
+	float *d_other_flop)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = threadIdx.y + blockIdx.y * blockDim.y;
@@ -418,7 +418,7 @@ void d_update(double *d_gamma, double *d_mu, double *d_beta,
 			if (ind == 0)
 				d_other_flop[mod] += M * 2 + d_nVars[mod] * 3;
 			int	i, n = min(M - 1, Z - 1);
-			double	gamma = d_gamma[mod];
+			float	gamma = d_gamma[mod];
 			d_mu[mod * (M - 1) + ind] += gamma * d_d[mod * (M - 1) + ind];
 			if (ind < d_nVars[mod]) {
 				i = d_lVars[mod * n + ind];
@@ -432,7 +432,7 @@ void d_update(double *d_gamma, double *d_mu, double *d_beta,
 __global__
 void d_lasso_drop(int *d_ind, int *d_lVars, int *d_nVars,
 	int *d_lasso, int M, int Z, int l, int *d_done,
-	double *d_drop_flop)
+	float *d_drop_flop)
 {
 	int ind = threadIdx.x;
 	int mod = blockIdx.x;
@@ -441,7 +441,7 @@ void d_lasso_drop(int *d_ind, int *d_lVars, int *d_nVars,
 			int	st, tmp, n = min(M - 1, Z - 1);
 			st = d_ind[mod];
 			if (ind == 0)
-				d_drop_flop[mod] += 4 * pow(double(d_nVars[mod] - st), 2);
+				d_drop_flop[mod] += 4 * pow(float(d_nVars[mod] - st), 2);
 			if (ind < d_nVars[mod] - 1 && ind >= st) {
 				tmp = d_lVars[mod * n + ind + 1];
 				__syncthreads();
@@ -455,9 +455,9 @@ void d_lasso_drop(int *d_ind, int *d_lVars, int *d_nVars,
 
 // Computing _ = mu - y.
 __global__
-void d_ress(double *d_Y, double *d_mu, double *d_,
+void d_ress(float *d_Y, float *d_mu, float *d_,
 	int M, int Z, int *d_act, int l, int *d_done,
-	double *d_other_flop)
+	float *d_other_flop)
 {
 	int	ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int	mod = threadIdx.y + blockIdx.y * blockDim.y;
@@ -474,9 +474,9 @@ void d_ress(double *d_Y, double *d_mu, double *d_,
 
 // Computes G and breaking condition.
 __global__
-void d_final(double *d_, double *d_beta, double *d_upper1,
-	double *d_normb, int *d_nVars, int *d_step, double g,
-	int M, int Z, int l, int *d_done, double *d_other_flop,
+void d_final(float *d_, float *d_beta, float *d_upper1,
+	float *d_normb, int *d_nVars, int *d_step, float g,
+	int M, int Z, int l, int *d_done, float *d_other_flop,
 	int *d_towrite)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -484,14 +484,20 @@ void d_final(double *d_, double *d_beta, double *d_upper1,
 		if (ind == 0)
 			d_other_flop[ind] += M * 3 + Z + 5;
 		int	i;
-		double	upper1 = 0, normb = 0;
+		float	upper1 = 0, normb = 0;
 		for (i = 0; i < Z - 1; i++)
 			normb += fabs(d_beta[ind * (Z - 1) + i]);
-		for (i = 0; i < M - 1; i++)
-			upper1 += pow(d_[ind * (M - 1) + i], 2);
+		for (i = 0; i < M - 1; i++) {
+			float val = d_[ind * (M - 1) + i];
+			upper1 += val * val;
+		}
 		upper1 = sqrt(upper1);
 		if (d_step[ind] > 1) {
-			double G = -(d_upper1[ind] - upper1) / (d_normb[ind] - normb);
+			float G = d_normb[ind] - normb;
+			if (G == 0)
+				G = INF;
+			else
+				G = -(d_upper1[ind] - upper1) / G;
 			if (G < g) {
 				d_done[ind] = 1;
 				*d_towrite = 1;
