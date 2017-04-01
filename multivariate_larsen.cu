@@ -1,7 +1,5 @@
-#include <iostream>
-#include <fstream>
-#include <cstring>
-#include <cmath>
+#include <bits/stdc++.h>
+#include <cuda_runtime.h>
 
 #include "file_proc.h"
 #include "lars_proc.h"
@@ -10,115 +8,127 @@
 
 using namespace std;
 
-// N is the number of models to solve in parallel.
-int N = 500;
-
 // Initialize all cuda vars.
-int initAll(float *&d_G, float *&d_I, float *&d_mu, float *&d_d, float *&d_c, float *&d_, float *&d_beta, float *&d_betaOLS, float *&d_gamma, float *&d_cmax, float *&d_upper1, float *&d_normb, int *&d_lVars, int *&d_nVars, int *&d_step, int *&d_ind, int *&d_done, int *&d_lasso, int *&d_act, int M, int Z){
-        int n = min(M - 1, Z - 1);
+template<class T>
+void init_all(T *&d_mu, T *&d_c, T *&d_, T *&d_G, T *&d_I, T *&d_beta, T *&d_betaOLS,
+    T *&d_d, T *&d_gamma, T *&d_cmax, T *&d_upper1, T *&d_normb, int *&d_lVars,
+    int *&d_nVars, int *&d_ind, int *&d_step, int *&d_lasso,
+    int *&d_done, int *&d_act, int *&d_ctrl,
+    int M, int Z, int num_models, T g)
+{
+    int max_vars = min(M - 1, Z - 1);
         
-        // Gram matrix and its inverse.        
-        cudaMalloc((void **)&d_G, n * n * sizeof(float));
-        cudaMalloc((void **)&d_I, n * n * sizeof(float));
+    cudaMallocManaged(&d_mu, num_models * (M - 1) * sizeof(T));
+    cudaMallocManaged(&d_c, num_models * (Z - 1) * sizeof(T));
+    cudaMallocManaged(&d_, num_models * (Z - 1) * sizeof(T));
+    cudaMallocManaged(&d_G, max_vars * max_vars * sizeof(T));
+    cudaMallocManaged(&d_I, max_vars * max_vars * sizeof(T));
+    cudaMallocManaged(&d_beta, num_models * (Z - 1) * sizeof(T));
+    cudaMallocManaged(&d_betaOLS, num_models * max_vars * sizeof(T));
+    cudaMallocManaged(&d_d, num_models * (M - 1) * sizeof(T));
+    cudaMallocManaged(&d_gamma, num_models * max_vars * sizeof(T));
+    cudaMallocManaged(&d_cmax, num_models * sizeof(T));
+    cudaMallocManaged(&d_upper1, num_models * sizeof(T));
+    cudaMallocManaged(&d_normb, num_models * sizeof(T));
+        
+    cudaMallocManaged(&d_lVars, num_models * max_vars * sizeof(int));
+    cudaMallocManaged(&d_nVars, num_models * sizeof(int));
+    cudaMallocManaged(&d_ind, num_models * sizeof(int));
+    cudaMallocManaged(&d_step, num_models * sizeof(int));
+    cudaMallocManaged(&d_lasso, num_models * sizeof(int));
 
-        // Residual and d variables.
-        cudaMalloc((void **)&d_mu, (M - 1) * N * sizeof(float));
-        cudaMalloc((void **)&d_d, (M - 1) * N * sizeof(float));
-
-        // Correlation, temp and beta.
-        cudaMalloc((void **)&d_c, (Z - 1) * N * sizeof(float));
-        cudaMalloc((void **)&d_, (Z - 1) * N * sizeof(float));
-        cudaMalloc((void **)&d_beta, (Z - 1) * N *sizeof(float));
-
-        // betaOLS, gamma variables.
-        cudaMalloc((void **)&d_betaOLS, n * N * sizeof(float));
-        cudaMalloc((void **)&d_gamma, n * N * sizeof(float));
-
-        // max correlation cmax, upper1 and normb.
-        cudaMalloc((void **)&d_cmax, N * sizeof(float));
-        cudaMalloc((void **)&d_upper1, N * sizeof(float));
-        cudaMalloc((void **)&d_normb, N * sizeof(float));
-
-        // list of included variables lvars.
-        cudaMalloc((void **)&d_lVars, n * N * sizeof(int));
-
-        // number of included variables nvars, step, store indexes variable, is model done variable, lasso condition variable, act is the list of current models executing.
-        cudaMalloc((void **)&d_nVars, N * sizeof(int));
-        cudaMalloc((void **)&d_step, N * sizeof(int));
-        cudaMalloc((void **)&d_ind, N * sizeof(int));
-        cudaMalloc((void **)&d_done, N * sizeof(int));
-        cudaMalloc((void **)&d_lasso, N * sizeof(int));
-        cudaMalloc((void **)&d_act, N * sizeof(int));	
-	return 0;
+    cudaMallocManaged(&d_done, num_models * sizeof(int));
+    cudaMallocManaged(&d_act, num_models * sizeof(int));
+    cudaMallocManaged(&d_ctrl, 2 * sizeof(int));
 }
 
 // Delete all cuda vars.
-int freeAll(float *&d_new1, float *&d_new, float *&d_G,
-        float *&d_I, float *&d_mu, float *&d_d,
-        float *&d_c, float *&d_, float *&d_beta,
-        float *&d_betaOLS, float *&d_gamma,
-        float *&d_cmax, float *&d_upper1,
-        float *&d_normb, int *&d_lVars, int *&d_nVars,
-        int *&d_step, int *&d_ind, int *&d_done,
-        int *&d_lasso, int *&d_act)
+template<class T>
+void free_all(T *d_X, T *d_Y, T *d_mu, T *d_c, T *d_, T *d_G, T *d_I, T *d_beta, T *d_betaOLS,
+    T *d_d, T *d_gamma, T *d_cmax, T *d_upper1, T *d_normb, int *d_lVars, int *d_nVars,
+    int *d_ind, int *d_step, int *d_lasso,
+    int *d_done, int *d_act, int *d_ctrl,
+    int M, int Z, int num_models, T g)
 {
-        cudaFree(d_new1);
-        cudaFree(d_new);
-        cudaFree(d_G);
-        cudaFree(d_I);
-        cudaFree(d_mu);
-        cudaFree(d_d);
-        cudaFree(d_c);
-        cudaFree(d_);
-        cudaFree(d_beta);
-        cudaFree(d_betaOLS);
-        cudaFree(d_gamma);
-        cudaFree(d_cmax);
-        cudaFree(d_upper1);
-        cudaFree(d_normb);
-        cudaFree(d_lVars);
-        cudaFree(d_nVars);
-        cudaFree(d_step);
-        cudaFree(d_ind);
-        cudaFree(d_done);
-        cudaFree(d_lasso);
-        cudaFree(d_act);
-	return 0;
+    cudaFree(d_X);
+    cudaFree(d_Y);
+    cudaFree(d_mu);
+    cudaFree(d_c);
+    cudaFree(d_);
+    cudaFree(d_G);
+    cudaFree(d_beta);
+    cudaFree(d_betaOLS);
+    cudaFree(d_d);
+    cudaFree(d_gamma);
+    cudaFree(d_cmax);
+    cudaFree(d_upper1);
+    cudaFree(d_normb);
+
+    cudaFree(d_lVars);
+    cudaFree(d_nVars);
+    cudaFree(d_ind);
+    cudaFree(d_step);
+    cudaFree(d_lasso);
+        
+    cudaFree(d_done);
+    cudaFree(d_act);
+    cudaFree(d_ctrl);
+}
+
+int str_to_int(char *argv) {
+    int i = 0, num_models = 0;
+    while(argv[i] != '\0') {
+        num_models = num_models * 10 + argv[i] - '0';
+        i++;
+    }
+    return num_models;
 }
 
 int main(int argc, char *argv[]) {
-        // Delete files used in the code if already existing.
-	removeUsedFiles();
+    // Delete files used in the code if already existing.
+    remove_used_files();
         
-        // Reading flattened MRI image.
-        dMatrix d_mat = readFlatMRI(argv[argc - 1]);
-        int M = d_mat.M, Z = d_mat.N, i;
-	cout << "Read FMRI Data of shape:" << M << ' ' << Z << endl;
+    // Reading flattened MRI image.
+    float **ret = read_flat_mri<float>(argv[argc - 1]);
+    int M = 295, Z = 39658;
+    cout << "Read FMRI Data of shape: " << M << ' ' << Z << endl;
         
-        // Remove first and last row for new1 and new respectively and normalize.
-        float *d_new1, *d_new;
-        dMatrix	*list = procFlatMRI(d_mat);
-	d_new1 = list[0].dmatrix;
-	d_new = list[1].dmatrix;
+    // Remove first and last row for new1 and new respectively and normalize.
+    ret = proc_flat_mri<float>(ret[0], M, Z);
+    float *d_X = ret[0], *d_Y = ret[1];
 
-        // Initialize all Lars variables.
-        float *d_G, *d_I, *d_mu, *d_d, *d_c, *d_, *d_beta, *d_betaOLS,*d_gamma;
-        float *d_cmax, *d_upper1, *d_normb;
-        int *d_lVars, *d_nVars, *d_step, *d_ind, *d_done, *d_lasso, *d_act;
-        int n = min(M - 1, Z - 1);
-	initAll(d_G, d_I, d_mu, d_d, d_c, d_, d_beta, d_betaOLS, d_gamma, d_cmax, d_upper1, d_normb, d_lVars, d_nVars, d_step, d_ind, d_done, d_lasso, d_act, M, Z);
+    // Initialize all Lars variables.
+    float *d_mu, *d_c, *d_, *d_G, *d_I, *d_beta, *d_betaOLS, *d_d, *d_gamma, *d_cmax,
+        *d_upper1, *d_normb;
+    int *d_lVars, *d_nVars, *d_ind, *d_step, *d_lasso, *d_done, *d_act, *d_ctrl;
+    
+    // Number of models to solve in parallel.
+    int num_models = 1000;
+    cout << "Number of models in ||l: " << num_models << endl;
 
-        // Setting initial executing models.
-        int *h_act = new int[N];
-	for (i = 0; i < N; i++)
-                h_act[i] = i;
-	cudaMemcpy(d_act, h_act, N * sizeof(int),cudaMemcpyHostToDevice);
-	delete[] h_act;
+    //Pruning larsen condition.
+    float g = 0.43;
 
-        // Execute lars model.
-	lars(d_new1, d_new, d_mu, d_c, d_, d_G, d_I, d_beta, d_betaOLS, d_d, d_gamma, d_cmax, d_upper1, d_normb, d_lVars, d_nVars, d_ind, d_step, d_done, d_lasso, M, Z, d_act, N, 0.43);
+    init_all<float>(d_mu, d_c, d_, d_G, d_I, d_beta, d_betaOLS, d_d, d_gamma, d_cmax,
+        d_upper1, d_normb, d_lVars, d_nVars, d_ind, d_step, d_lasso,
+        d_done, d_act, d_ctrl,
+        M, Z, num_models, g);
 
-        // Clearing all Lars variables.
-	freeAll(d_new1, d_new, d_G, d_I, d_mu, d_d, d_c, d_, d_beta, d_betaOLS, d_gamma, d_cmax, d_upper1, d_normb, d_lVars, d_nVars, d_step, d_ind, d_done, d_lasso, d_act);
-	return 0;
+    // Setting initial executing models.
+    cudaDeviceSynchronize();
+    for (int i = 0; i < num_models; i++)
+        d_act[i] = i;
+
+    // Execute lars.
+    lars<float>(d_X, d_Y, d_mu, d_c, d_, d_G, d_I, d_beta, d_betaOLS, d_d, d_gamma, d_cmax,
+        d_upper1, d_normb, d_lVars, d_nVars, d_ind, d_step, d_lasso,
+        d_done, d_act, d_ctrl,
+        M, Z, num_models, g);
+
+    // Clearing all Lars variables.
+    free_all<float>(d_X, d_Y, d_mu, d_c, d_, d_G, d_I, d_beta, d_betaOLS, d_d, d_gamma,
+        d_cmax, d_upper1, d_normb, d_lVars, d_nVars, d_ind, d_step, d_lasso,
+        d_done, d_act, d_ctrl,
+        M, Z, num_models, g);
+    return 0;
 }
