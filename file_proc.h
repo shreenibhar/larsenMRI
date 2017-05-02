@@ -5,6 +5,7 @@
 #include <cuda_runtime.h>
 
 #include "file_proc_kernel.h"
+#include "utilities.h"
 
 using namespace std;
 
@@ -23,48 +24,68 @@ void remove_used_files() {
 // Returns device pointers.
 // Function to read flattened 2d FMRI image.
 template<class T>
-T ** read_flat_mri(char *argv) {
+dmatrix<T> read_flat_mri(char *argv) {
     fstream fp(argv);
-    int M, Z, i, j;
+    int M, Z;
     string  str;
     fp >> M >> Z;
     
-    T *number = new T[M * Z], *d_number;
-    for (i = 0; i < M; i++)
-        for (j = 0; j < Z; j++)
-            fp >> number[i * Z + j];
+    T *h_number = new T[M * Z], *d_number;
+    for (int i = 0; i < M; i++)
+        for (int j = 0; j < Z; j++)
+            fp >> h_number[i * Z + j];
     fp.close();
     
     cudaMallocManaged(&d_number, M * Z * sizeof(T));
-    cudaMemcpy(d_number, number, M * Z * sizeof(T), cudaMemcpyHostToDevice);
-    delete[] number;
+    cudaMemcpy(d_number, h_number, M * Z * sizeof(T), cudaMemcpyHostToDevice);
+    delete[] h_number;
     
-    T **ret = new T*[1];
-    ret[0] = d_number;
-    return ret;
+    dmatrix<T> number;
+    number.M = M;
+    number.N = Z;
+    number.d_mat = d_number;
+    return number;
 }
 
 // Remove first and last row for new1 and new respectively and normalize.
 template<class T>
-T ** proc_flat_mri(T *d_number, int M, int Z) {
-    T *d_X, *d_Y;
-    cudaMallocManaged(&d_X, (M - 1) * Z * sizeof(T));
-    cudaMallocManaged(&d_Y, (M - 1) * Z * sizeof(T));
+void proc_flat_mri(dmatrix<T> number, dmatrix<T> X, dmatrix<T> Y) {
+    dim3 blockDim(32, 32);
+    dim3 gridDim((number.M + blockDim.x - 1) / blockDim.x,
+        (number.N + blockDim.y - 1) / blockDim.y);
+    d_trim<T><<<gridDim, blockDim>>>(number, X, Y);
     
-    dim3 bmz(31, 31);
-    dim3 gmz((M + bmz.x - 1) / bmz.x, (Z + bmz.y - 1) / bmz.y);
-    d_trim<T><<<gmz, bmz>>>(d_number, d_X, d_Y, M, Z);
-    
-    cudaFree(d_number);
+    cudaFree(number.d_mat);
 
-    dim3 bz(1000);
-    dim3 gz((Z + bz.x - 1) / bz.x);
-    d_proc<T><<<gz, bz>>>(d_X, d_Y, M, Z);
+    dim3 bz(1024);
+    dim3 gz((X.N + bz.x - 1) / bz.x);
+    d_zscore<T><<<gz, bz>>>(X, Y);
 
-    T **ret = new T*[2];
-    ret[0] = d_X;
-    ret[1] = d_Y;
-    return ret;
+    cudaDeviceSynchronize();
+    for (int j = 0; j < Y.N; j++) {
+        T tot = 0;
+        for (int i = 0; i < Y.M; i++) {
+            T val = Y.d_mat[i * Y.N + j];
+            tot += val * val;
+        }
+        tot = sqrt(tot);
+        for (int i = 0; i < Y.M; i++) {
+            T val = Y.d_mat[i * Y.N + j] / tot;
+            Y.d_mat[i * Y.N + j] = val;
+        }
+    }
+    for (int j = 0; j < X.N; j++) {
+        T tot = 0;
+        for (int i = 0; i < X.M; i++) {
+            T val = X.d_mat[i * Y.N + j];
+            tot += val * val;
+        }
+        tot = sqrt(tot);
+        for (int i = 0; i < X.M; i++) {
+            T val = X.d_mat[i * X.N + j] / tot;
+            X.d_mat[i * X.N + j] = val;
+        }
+    }
 }
 
 #endif

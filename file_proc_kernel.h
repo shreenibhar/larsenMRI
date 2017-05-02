@@ -4,48 +4,53 @@
 #include <bits/stdc++.h>
 #include <cuda_runtime.h>
 
+#include "utilities.h"
+
 using namespace std;
 
-// Remove last row for new1 and first row for new from d_number.
+// Remove last row for X and first row for Y from d_number.
 template<class T>
-__global__ void d_trim(T *d_number, T *d_X, T *d_Y, int M, int Z) {
+__global__ void d_trim(dmatrix<T> number, dmatrix<T> X, dmatrix<T> Y) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (y < Z) {
-        if (x < M - 1)
-            d_X[x * Z + y] = d_number[x * Z + y];
-        if(x > 0 && x < M)
-            d_Y[(x - 1) * Z + y] = d_number[x * Z + y];
+    if (y < number.N) {
+        if (x < number.M - 1)
+            X.set(x, y, number.get(x, y));
+        if(x > 0 && x < number.M)
+            Y.set(x - 1, y, number.get(x, y));
     }
 }
 
 // Normalize data.
 template<class T>
-__global__ void d_proc(T *d_X, T *d_Y, int M, int Z) {
+__global__ void d_zscore(dmatrix<T> X, dmatrix<T> Y) {
     int ind = threadIdx.x + blockIdx.x * blockDim.x;
-    if (ind < Z) {
-        float tot1 = 0, tot = 0;
-        for (int i = 0; i < M - 1; i++) {
-            tot1 += d_X[i * Z + ind];
-            tot += d_Y[i * Z + ind];
+    if (ind < X.N) {
+        T totX = 0, totY = 0;
+        for (int i = 0; i < X.M; i++) {
+            totX += X.get(i, ind);
+            totY += Y.get(i, ind);
         }
-        tot1 /= M - 1;
-        tot /= M - 1;
+        totX /= X.M;
+        totY /= X.M;
         
-        float sum1 = 0, sum = 0;
-        for (int i = 0; i < M - 1; i++) {
-            d_X[i * Z + ind] -= tot1;
-            d_Y[i * Z + ind] -= tot;
-            sum1 += pow(d_X[i * Z + ind], 2);
-            sum += pow(d_Y[i * Z + ind], 2);
+        T sumX = 0, sumY = 0;
+        for (int i = 0; i < X.M; i++) {
+            T valX = X.get(i, ind) - totX;
+            T valY = Y.get(i, ind) - totY;
+            X.set(i, ind, valX);
+            Y.set(i, ind, valY);
+            sumX += valX * valX;
+            sumY += valY * valY;
         }
-        sum1 = sqrt(sum1 / (M - 2));
-        sum = sqrt(sum / (M - 2));
+        sumX = sqrt(sumX / (X.M - 1));
+        sumY = sqrt(sumY / (X.M - 1));
         
-        tot1 = tot = 0;
-        for (int i = 0; i < M - 1; i++) {
-            d_X[i * Z + ind] /= sum1;
-            d_Y[i * Z + ind] /= sum;
+        for (int i = 0; i < X.M; i++) {
+            T valX = X.get(i, ind) / sumX;
+            T valY = Y.get(i, ind) / sumY;
+            X.set(i, ind, valX);
+            Y.set(i, ind, valY);
         }
     }
 }
