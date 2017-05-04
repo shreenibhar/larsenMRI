@@ -27,21 +27,6 @@ void h_init_full(dmatrix<T> mat, T val) {
 }
 
 template<class T>
-__global__ void d_init_part(dmatrix<T> mat, T val, int mod) {
-	int ind = threadIdx.x + blockIdx.x * blockDim.x;
-	if (ind < mat.N)
-		mat.set(mod, ind, val);
-}
-
-template<class T>
-void h_init_part(dmatrix<T> mat, T val, int mod) {
-	int occup = (mat.N < 1024)? mat.N: 1024;
-	dim3 blockDim(occup);
-	dim3 gridDim((mat.N + blockDim.x - 1) / blockDim.x);
-	d_init_part<T><<<gridDim, blockDim>>>(mat, val, mod);
-}
-
-template<class T>
 __global__ void d_init_y(dmatrix<T> y, dmatrix<T> Yt, int mod, int act) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < y.N)
@@ -54,6 +39,41 @@ void h_init_y(dmatrix<T> y, dmatrix<T> Yt, int mod, int act) {
 	dim3 blockDim(occup);
 	dim3 gridDim((y.N + blockDim.x - 1) / blockDim.x);
 	d_init_y<T><<<gridDim, blockDim>>>(y, Yt, mod, act);
+}
+
+template<class T>
+__global__ void d_reset(dmatrix<T> y, dmatrix<T> Yt, dmatrix<T> mu, dmatrix<T> beta, dmatrix<bool> maskVars,
+	dmatrix<int> act, dmatrix<int> nVars, dmatrix<int> lasso, dmatrix<int> step, dmatrix<int> done)
+{
+	int ind = threadIdx.x + blockIdx.x * blockDim.x;
+	int mod = threadIdx.y + blockIdx.y * blockDim.y;
+	if (mod < mu.M && done.get(0, mod) == 2) {
+		int hact = act.get(0, mod);
+		if (ind == 0) {
+			nVars.set(0, mod, 0);
+			lasso.set(0, mod, 0);
+			step.set(0, mod, 0);
+			done.set(0, mod, 0);
+		}
+		if (ind < maskVars.N)
+			maskVars.set(mod, ind, false);
+		if (ind < mu.N)
+			mu.set(mod, ind, 0);
+		if (ind < beta.N)
+			beta.set(mod, ind, 0);
+		if (ind < y.N)
+			y.set(mod, ind, Yt.get(hact, ind));
+	}
+}
+
+template<class T>
+void h_reset(dmatrix<T> y, dmatrix<T> Yt, dmatrix<T> mu, dmatrix<T> beta, dmatrix<bool> maskVars,
+	dmatrix<int> act, dmatrix<int> nVars, dmatrix<int> lasso, dmatrix<int> step, dmatrix<int> done)
+{
+	dim3 blockDim(32, 32);
+	dim3 gridDim((beta.N + blockDim.x - 1) / blockDim.x,
+		(beta.M + blockDim.y - 1) / blockDim.y);
+	d_reset<T><<<gridDim, blockDim>>>(y, Yt, mu, beta, maskVars, act, nVars, lasso, step, done);
 }
 
 template<class T>
@@ -90,31 +110,31 @@ void h_copy(dmatrix<T> to, dmatrix<T> from) {
 	d_copy<T><<<gridDim, blockDim>>>(to, from);
 }
 
-__global__ void d_check(dmatrix<int> ctrl, dmatrix<int> step, dmatrix<int> nVars, dmatrix<int> done, int max_vars)
+__global__ void d_check(dmatrix<int> step, dmatrix<int> nVars, dmatrix<int> done, int max_vars)
 {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < step.M && !done.get(0, mod)) {
-		if (nVars.get(0, mod) < max_vars && step.get(0, mod) < 8 * max_vars)
-			ctrl.set(0, 0, 1);
+		if (nVars.get(0, mod) < max_vars && step.get(0, mod) < 8 * max_vars) {
+			// NOP
+		}
 		else {
 			done.set(0, mod, 1);
-			ctrl.set(0, 1, 1);
 		}
 	}
 }
 
-// d_ctrl is the variable which is set to 0 if all the models are completed hence stop and 1 if not.
 // Loop checker of larsen.
-void h_check(dmatrix<int> ctrl, dmatrix<int> step, dmatrix<int> nVars, dmatrix<int> done, int max_vars)
+void h_check(dmatrix<int> step, dmatrix<int> nVars, dmatrix<int> done, int max_vars)
 {
 	int occup = (step.M < 1024)? step.M: 1024;
 	dim3 blockDim(occup);
 	dim3 gridDim((step.M + blockDim.x - 1) / blockDim.x);
-	d_check<<<gridDim, blockDim>>>(ctrl, step, nVars, done, max_vars);
+	d_check<<<gridDim, blockDim>>>(step, nVars, done, max_vars);
 }
 
 template<class T>
-__global__ void d_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c, dmatrix<int> act, dmatrix<int> done)
+__global__ void d_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c,
+	dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	const int TILE_DIM = 16;
 	int col = threadIdx.x + blockIdx.x * TILE_DIM;
@@ -132,6 +152,10 @@ __global__ void d_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c,
 	int BCols = 1;
 
 	if (mod < c.M && !done.get(0, mod)) {
+		if (row == 0 && col == 0) {
+			flop.set(mod, 0, Xt.M * Xt.N * 2 + flop.get(mod, 0));
+		}
+
 		int hact = act.get(0, mod);
 
 		for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
@@ -158,12 +182,13 @@ __global__ void d_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c,
 
 // c = X' * __.
 template<class T>
-void h_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c, dmatrix<int> act, dmatrix<int> done)
+void h_corr(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> mu, dmatrix<T> c,
+	dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	int TILE_DIM = 16;
 	dim3 blockDim(TILE_DIM, TILE_DIM, 1);
 	dim3 gridDim(1, (c.N + blockDim.y - 1) / blockDim.y, c.M);
-	d_corr<T><<<gridDim, blockDim>>>(Xt, y, mu, c, act, done);
+	d_corr<T><<<gridDim, blockDim>>>(Xt, y, mu, c, act, done, flop);
 }
 
 template<class T>
@@ -199,13 +224,17 @@ void h_max_corr(dmatrix<T> c, dmatrix<T> cmax,
 	d_max_corr<T><<<gridDim, blockDim>>>(c, cmax, ind, maskVars, done);
 }
 
-__global__ void d_lasso_add(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars, dmatrix<int> lasso, dmatrix<int> done, int max_vars)
+template<class T>
+__global__ void d_lasso_add(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars, dmatrix<int> lasso, dmatrix<int> done, int max_vars, dmatrix<T> flop)
 {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < maskVars.M && !done.get(0, mod)) {
 		if (!lasso.get(0, mod)) {
 			int hind = ind.get(0, mod);
 			int ni = nVars.get(0, mod);
+
+			flop.set(mod, 2, 3 * (ni + 1) * (ni + 1) + flop.get(mod, 2));
+
 			lVars.set(mod, ni, hind);
 			maskVars.set(mod, hind, true);
 			nVars.set(0, mod, ni + 1);
@@ -216,17 +245,18 @@ __global__ void d_lasso_add(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> n
 }
 
 // Add cmax to active set.
-void h_lasso_add(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars, dmatrix<int> lasso, dmatrix<int> done, int max_vars)
+template<class T>
+void h_lasso_add(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars, dmatrix<int> lasso, dmatrix<int> done, int max_vars, dmatrix<T> flop)
 {
 	int occup = (maskVars.M < 1024)? maskVars.M: 1024;
 	dim3 blockDim(occup);
 	dim3 gridDim((maskVars.M + blockDim.x - 1) / blockDim.x);
-	d_lasso_add<<<gridDim, blockDim>>>(ind, lVars, nVars, maskVars, lasso, done, max_vars);
+	d_lasso_add<<<gridDim, blockDim>>>(ind, lVars, nVars, maskVars, lasso, done, max_vars, flop);
 }
 
 template<class T>
 __global__ void d_xincty(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> __,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	const int TILE_DIM = 16;
 	int col = threadIdx.x + blockIdx.x * TILE_DIM;
@@ -245,6 +275,10 @@ __global__ void d_xincty(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> __,
 		int BRows = y.N;
 		int BCols = 1;
 		int hact = act.get(0, mod);
+
+		if (row == 0 && col == 0) {
+			flop.set(mod, 1, ni * Xt.N * 2 + 2 * ni * ni + flop.get(mod, 1));
+		}
 
 		for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
 			if (k * TILE_DIM + threadIdx.x < ACols && row < ARows)
@@ -271,18 +305,18 @@ __global__ void d_xincty(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> __,
 // Compute __ = X(:, A)' * y.
 template<class T>
 void h_xincty(dmatrix<T> Xt, dmatrix<T> y, dmatrix<T> __,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	int max_vars = y.N;
 	int TILE_DIM = 16;
 	dim3 blockDim(TILE_DIM, TILE_DIM, 1);
 	dim3 gridDim(1, (max_vars + blockDim.y - 1) / blockDim.y, y.M);
-	d_xincty<T><<<gridDim, blockDim>>>(Xt, y, __, lVars, nVars, act, done); 
+	d_xincty<T><<<gridDim, blockDim>>>(Xt, y, __, lVars, nVars, act, done, flop); 
 }
 
 template<class T>
 __global__ void d_set_gram(dmatrix<T> Xt, dmatrix<T> G,
-	dmatrix<int> lVars, dmatrix<int> act, int ni, int mod)
+	dmatrix<int> lVars, dmatrix<int> act, int ni, int mod, dmatrix<T> flop)
 {
 	const int TILE_DIM = 16;
 	int col = threadIdx.x + blockIdx.x * TILE_DIM;
@@ -298,6 +332,10 @@ __global__ void d_set_gram(dmatrix<T> Xt, dmatrix<T> G,
 	int BRows = Xt.N;
 	int BCols = ni;
 	int hact = act.get(0, mod);
+
+	if (row == 0 && col == 0) {
+		flop.set(mod, 4, ni * ni * ni * 3 + flop.get(mod, 4));
+	}
 
 	for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
 		if (k * TILE_DIM + threadIdx.x < ACols && row < ARows)
@@ -322,14 +360,14 @@ __global__ void d_set_gram(dmatrix<T> Xt, dmatrix<T> G,
 // Compute G = X(:, A)' * X(:, A).
 template<class T>
 void h_set_gram(dmatrix<T> Xt, dmatrix<T> G,
-	dmatrix<int> lVars, dmatrix<int> act, int ni, int mod)
+	dmatrix<int> lVars, dmatrix<int> act, int ni, int mod, dmatrix<T> flop)
 {
 	int TILE_DIM = 16;
 	int max_vars = Xt.N;
 	dim3 blockDim(TILE_DIM, TILE_DIM);
 	dim3 gridDim((max_vars + blockDim.x - 1) / blockDim.x,
 		(max_vars + blockDim.y - 1) / blockDim.y);
-	d_set_gram<T><<<gridDim, blockDim>>>(Xt, G, lVars, act, ni, mod);
+	d_set_gram<T><<<gridDim, blockDim>>>(Xt, G, lVars, act, ni, mod, flop);
 }
 
 template<class T>
@@ -384,7 +422,7 @@ void h_betaols(dmatrix<T> I, dmatrix<T> __, dmatrix<T> betaOls,
 
 template<class T>
 __global__ void d_d(dmatrix<T> X, dmatrix<T> betaOls, dmatrix<T> mu, dmatrix<T> d,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	const int TILE_DIM = 16;
 	int col = threadIdx.x + blockIdx.x * TILE_DIM;
@@ -403,6 +441,10 @@ __global__ void d_d(dmatrix<T> X, dmatrix<T> betaOls, dmatrix<T> mu, dmatrix<T> 
 		int BRows = ni;
 		int BCols = 1;
 		int hact = act.get(0, mod);
+
+		if (row == 0 && col == 0) {
+			flop.set(mod, 5, X.M * ni * 2 + X.M + flop.get(mod, 5));
+		}
 
 		for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
 			if (k * TILE_DIM + threadIdx.x < ACols && row < ARows)
@@ -429,23 +471,28 @@ __global__ void d_d(dmatrix<T> X, dmatrix<T> betaOls, dmatrix<T> mu, dmatrix<T> 
 // Computing d = X(:, A) * betaOLS - mu and gamma list.
 template<class T>
 void h_d(dmatrix<T> X, dmatrix<T> betaOls, dmatrix<T> mu, dmatrix<T> d,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	int TILE_DIM = 16;
 	dim3 blockDim(TILE_DIM, TILE_DIM, 1);
 	dim3 gridDim(1, (d.N + blockDim.y - 1) / blockDim.y, d.M);
 	
-	d_d<T><<<gridDim, blockDim>>>(X, betaOls, mu, d, lVars, nVars, act, done);
+	d_d<T><<<gridDim, blockDim>>>(X, betaOls, mu, d, lVars, nVars, act, done, flop);
 }
 
 template<class T>
 __global__ void d_gammat(dmatrix<T> __, dmatrix<T> beta, dmatrix<T> betaOls,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done, dmatrix<T> flop)
 {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < beta.M && !done.get(0, mod)) {
 		int ni = nVars.get(0, mod);
+
+		if (ind == 0) {
+			flop.set(mod, 6, ni * 2 + flop.get(mod, 6));
+		}
+
 		if (ind < ni - 1) {
 			int i = lVars.get(mod, ind);
 			T tot = beta.get(mod, i) / (beta.get(mod, i) - betaOls.get(mod, ind));
@@ -458,13 +505,13 @@ __global__ void d_gammat(dmatrix<T> __, dmatrix<T> beta, dmatrix<T> betaOls,
 
 template<class T>
 void h_gammat(dmatrix<T> __, dmatrix<T> beta, dmatrix<T> betaOls,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done, dmatrix<T> flop)
 {
 	int max_vars = lVars.N;
 	dim3 blockDim(32, 32);
 	dim3 gridDim((max_vars + blockDim.x - 1) / blockDim.x,
 		(lVars.M + blockDim.y - 1) / blockDim.y);
-	d_gammat<T><<<gridDim, blockDim>>>(__, beta, betaOls, lVars, nVars, done);
+	d_gammat<T><<<gridDim, blockDim>>>(__, beta, betaOls, lVars, nVars, done, flop);
 }
 
 template<class T>
@@ -501,7 +548,7 @@ void h_min_gammat(dmatrix<T> gamma, dmatrix<T> __,
 
 template<class T>
 __global__ void d_xtd(dmatrix<T> Xt, dmatrix<T> d, dmatrix<T> _, dmatrix<T> c, dmatrix<T> cmax,
-	dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	const int TILE_DIM = 16;
 	int col = threadIdx.x + blockIdx.x * TILE_DIM;
@@ -520,6 +567,11 @@ __global__ void d_xtd(dmatrix<T> Xt, dmatrix<T> d, dmatrix<T> _, dmatrix<T> c, d
 
 	if (mod < d.M && !done.get(0, mod)) {
 		int hact = act.get(0, mod);
+
+		if (row == 0 && col == 0) {
+			flop.set(mod, 7, Xt.M * Xt.N * 2 + flop.get(mod, 7));
+			flop.set(mod, 8, Xt.M * 6 + flop.get(mod, 8));
+		}
 
 		for (int k = 0; k < (TILE_DIM + ACols - 1) / TILE_DIM; k++) {
 			if (k * TILE_DIM + threadIdx.x < ACols && row < ARows)
@@ -554,12 +606,12 @@ __global__ void d_xtd(dmatrix<T> Xt, dmatrix<T> d, dmatrix<T> _, dmatrix<T> c, d
 // Computing _ = X' * d.
 template<class T>
 void h_xtd(dmatrix<T> Xt, dmatrix<T> d, dmatrix<T> _, dmatrix<T> c, dmatrix<T> cmax,
-	dmatrix<int> act, dmatrix<int> done)
+	dmatrix<int> act, dmatrix<int> done, dmatrix<T> flop)
 {
 	int TILE_DIM = 16;
 	dim3 blockDim(TILE_DIM, TILE_DIM, 1);
 	dim3 gridDim(1, (_.N + blockDim.x - 1) / blockDim.x, d.M);
-	d_xtd<T><<<gridDim, blockDim>>>(Xt, d, _, c, cmax, act, done);
+	d_xtd<T><<<gridDim, blockDim>>>(Xt, d, _, c, cmax, act, done, flop);
 }
 
 template<class T>
@@ -626,16 +678,22 @@ void h_lasso_dev(dmatrix<T> __, dmatrix<T> gamma,
 
 template<class T>
 __global__ void d_update(dmatrix<T> gamma, dmatrix<T> mu, dmatrix<T> beta, dmatrix<T> betaOls, dmatrix<T> d,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done, dmatrix<T> flop)
 {
 	int mi = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < gamma.M && !done.get(0, mod)) {
+		int ni = nVars.get(0, mod);
+
+		if (mi == 0) {
+			flop.set(mod, 9, 2 * mu.N + 3 * ni + flop.get(mod, 9));
+		}
+
 		if (mi < gamma.N) {
 			T gma = gamma.get(0, mod);
 			T val = gma * d.get(mod, mi) + mu.get(mod, mi);
 			mu.set(mod, mi, val);
-			if (mi < nVars.get(0, mod)) {
+			if (mi < ni) {
 				int i = lVars.get(mod, mi);
 				val = gma * (betaOls.get(mod, mi) - beta.get(mod, i)) + beta.get(mod, i);
 				beta.set(mod, i, val);
@@ -647,56 +705,62 @@ __global__ void d_update(dmatrix<T> gamma, dmatrix<T> mu, dmatrix<T> beta, dmatr
 // Updates mu and beta.
 template<class T>
 void h_update(dmatrix<T> gamma, dmatrix<T> mu, dmatrix<T> beta, dmatrix<T> betaOls, dmatrix<T> d,
-	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done)
+	dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<int> done, dmatrix<T> flop)
 {
 	dim3 blockDim(32, 32);
 	dim3 gridDim((gamma.N + blockDim.x - 1) / blockDim.x,
 		(gamma.M + blockDim.y - 1) / blockDim.y);
-	d_update<T><<<gridDim, blockDim>>>(gamma, mu, beta, betaOls, d, lVars, nVars, done);
+	d_update<T><<<gridDim, blockDim>>>(gamma, mu, beta, betaOls, d, lVars, nVars, done, flop);
 }
 
+template<class T>
 __global__ void d_lasso_drop(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars,
-	dmatrix<int> lasso, dmatrix<int> done)
+	dmatrix<int> lasso, dmatrix<int> done, dmatrix<T> flop)
 {
 	int i = threadIdx.x;
 	int mod = blockIdx.x;
 	if (mod < lVars.M && !done.get(0, mod)) {
 		if (lasso.get(0, mod)) {
-			int st;
+			int st, ni = nVars.get(0, mod);
 			st = ind.get(0, mod);
-			if (i < nVars.get(0, mod) - 1 && i >= st) {
+			if (i < ni - 1 && i >= st) {
 				int tmp = lVars.get(mod, i + 1);
 				__syncthreads();
 				lVars.set(mod, i, tmp);
 			}
 			if (i == 0) {
-				nVars.set(0, mod, nVars.get(0, mod) - 1);
+				nVars.set(0, mod, ni - 1);
 				maskVars.set(mod, st, false);
+
+				flop.set(mod, 3, 4 * (ni - st) * (ni - st) + flop.get(mod, 3));
 			}
 		}
 	}
 }
 
 // Drops deviated lasso variable.
+template<class T>
 void h_lasso_drop(dmatrix<int> ind, dmatrix<int> lVars, dmatrix<int> nVars, dmatrix<bool> maskVars,
-	dmatrix<int> lasso, dmatrix<int> done)
+	dmatrix<int> lasso, dmatrix<int> done, dmatrix<T> flop)
 {
-	d_lasso_drop<<<lVars.M, lVars.N>>>(ind, lVars, nVars, maskVars, lasso, done);
+	d_lasso_drop<<<lVars.M, lVars.N>>>(ind, lVars, nVars, maskVars, lasso, done, flop);
 }
 
 template<class T>
-__global__ void d_final(dmatrix<T> mu, dmatrix<T> Yt, dmatrix<T> beta, dmatrix<T> upper1, dmatrix<T> normb,
-	dmatrix<int> nVars, dmatrix<int> step, dmatrix<int> act, dmatrix<int> done, dmatrix<int> ctrl,
-	T g)
+__global__ void d_final(dmatrix<T> mu, dmatrix<T> y, dmatrix<T> beta, dmatrix<T> upper1, dmatrix<T> normb,
+	dmatrix<int> nVars, dmatrix<int> step, dmatrix<int> act, dmatrix<int> done, T g, dmatrix<T> flop)
 {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < mu.M && !done.get(0, mod)) {
+		flop.set(mod, 10, beta.N * 3 + mu.N * 3 + flop.get(mod, 10));
+
 		int hact = act.get(0, mod);
+		step.set(0, mod, step.get(0, mod) + 1);
 		T hupper1 = 0, hnormb = 0;
 		for (int i = 0; i < beta.N; i++)
 			hnormb += fabs(beta.get(mod, i));
 		for (int i = 0; i < mu.N; i++) {
-			T val = mu.get(mod, i) - Yt.get(hact, i);
+			T val = mu.get(mod, i) - y.get(mod, i);
 			hupper1 += val * val;
 		}
 		hupper1 = sqrt(hupper1);
@@ -704,25 +768,23 @@ __global__ void d_final(dmatrix<T> mu, dmatrix<T> Yt, dmatrix<T> beta, dmatrix<T
 			T G = -(upper1.get(0, mod) - hupper1) / (normb.get(0, mod) - hnormb);
 			if (G < g) {
 				done.set(0, mod, 1);
-				ctrl.set(0, 1, 1);
+				return;
 			}
 		}
 		upper1.set(0, mod, hupper1);
 		normb.set(0, mod, hnormb);
-		step.set(0, mod, step.get(0, mod) + 1);
 	}
 }
 
 // Computes G and breaking condition.
 template<class T>
-void h_final(dmatrix<T> mu, dmatrix<T> Yt, dmatrix<T> beta, dmatrix<T> upper1, dmatrix<T> normb,
-	dmatrix<int> nVars, dmatrix<int> step, dmatrix<int> act, dmatrix<int> done, dmatrix<int> ctrl,
-	T g)
+void h_final(dmatrix<T> mu, dmatrix<T> y, dmatrix<T> beta, dmatrix<T> upper1, dmatrix<T> normb,
+	dmatrix<int> nVars, dmatrix<int> step, dmatrix<int> act, dmatrix<int> done, T g, dmatrix<T> flop)
 {
 	int occup = (mu.M < 1024)? mu.M: 1024;
 	dim3 blockDim(occup);
 	dim3 gridDim((mu.M + blockDim.x - 1) / blockDim.x);
-	d_final<T><<<gridDim, blockDim>>>(mu, Yt, beta, upper1, normb, nVars, step, act, done, ctrl, g);
+	d_final<T><<<gridDim, blockDim>>>(mu, y, beta, upper1, normb, nVars, step, act, done, g, flop);
 }
 
 #endif

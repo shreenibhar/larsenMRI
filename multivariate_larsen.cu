@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 
     // // Declare all Lars variables.
     dmatrix<precision> Xt, Yt, y, mu, c, _, __, G, I, beta, betaOls, d, gamma, cmax, upper1, normb;
-    dmatrix<int> lVars, nVars, ind, step, lasso, done, act, ctrl;
+    dmatrix<int> lVars, nVars, ind, step, lasso, done, act;
     dmatrix<bool> maskVars;
 
     // Number of models to solve in parallel.
@@ -117,9 +117,6 @@ int main(int argc, char *argv[]) {
     act.M = num_models;
     act.N = 1;
     cudaMallocManaged(&act.d_mat, act.M * act.N * sizeof(int));
-    ctrl.M = 2;
-    ctrl.N = 1;
-    cudaMallocManaged(&ctrl.d_mat, ctrl.M * ctrl.N * sizeof(int));
 
     maskVars.M = num_models;
     maskVars.N = c.N;
@@ -127,8 +124,7 @@ int main(int argc, char *argv[]) {
 
     // Execute lars.
     lars<precision>(X, Xt, Y, Yt, y, mu, c, _, __, G, I, beta, betaOls, d, gamma, cmax, upper1, normb,
-        lVars, nVars, maskVars, ind, step, lasso, done, act, ctrl,
-        g);
+        lVars, nVars, maskVars, ind, step, lasso, done, act, g);
 
     cudaFree(X.d_mat);
     cudaFree(Y.d_mat);
@@ -156,7 +152,6 @@ int main(int argc, char *argv[]) {
     cudaFree(lasso.d_mat);
     cudaFree(done.d_mat);
     cudaFree(act.d_mat);
-    cudaFree(ctrl.d_mat);
 
     cudaFree(maskVars.d_mat);
 
