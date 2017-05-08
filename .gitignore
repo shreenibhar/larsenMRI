@@ -1,6 +1,1 @@
-Results/
-data/
-.*
-*.out
-*.csv
-*.txt
+/data/
