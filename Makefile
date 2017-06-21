@@ -210,7 +210,7 @@ LIBRARIES :=
 ################################################################################
 
 # Gencode arguments
-SMS ?= 35 37 50 52 60
+SMS ?= 20 30 35 37 50 52 60
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
@@ -228,9 +228,7 @@ GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
 endif
 endif
 
-ALL_CCFLAGS += -dc
-
-LIBRARIES += -lcublas -lcublas_device -lcudadevrt
+LIBRARIES += -lcublas
 
 ifeq ($(SAMPLE_ENABLED),0)
 EXEC ?= @echo "[@]"
@@ -241,7 +239,7 @@ endif
 # Target rules
 all: build
 
-build: multivariate_larsen
+build: multivariateLarsen
 
 check.deps:
 ifeq ($(SAMPLE_ENABLED),0)
@@ -250,16 +248,25 @@ else
 	@echo "Sample is ready - all dependencies have been met"
 endif
 
-multivariate_larsen.o:multivariate_larsen.cu
+blas.o: blas.cu blas.h
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-multivariate_larsen: multivariate_larsen.o
+kernels.o: kernels.cu kernels.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+utilities.o: utilities.cpp utilities.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+multivariateLarsen.o: multivariateLarsen.cu utilities.h kernels.h blas.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+multivariateLarsen: multivariateLarsen.o utilities.o kernels.o blas.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 
 run: build
-	$(EXEC) ./multivariate_larsen
+	$(EXEC) ./multivariateLarsen
 
 clean:
-	rm -f multivariate_larsen multivariate_larsen.o
+	rm -f multivariateLarsen multivariateLarsen.o utilities.o blas.o kernels.o
 
 clobber: clean
