@@ -29,6 +29,45 @@ int optimalBlock1D(int problemSize) {
     return blockSize;
 }
 
+double flopCounter(int M, int N, int numModels, int *hNVars, int *hLasso, int *hDropidx) {
+    double flop = 0;
+    // mat_sub r
+    flop += (double) M * (double) numModels;
+    // gemm c
+    flop += 2.0 * (double) M * (double) N * (double) numModels;
+    for (int i = 0; i < numModels; i++) {
+        // XA' * y
+        flop += 2.0 * (double) M * hNVars[i];
+        // betaOls
+        flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+        // Inverse ops for R
+        flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
+        if (hLasso[i] == 0) {
+            // cholInsert
+            flop += 3.0 * (double) hNVars[i] * (double) hNVars[i];
+        }
+        else {
+            // cholDelete
+            flop += 4.0 * (double) (hNVars[i] - hDropidx[i] + 1) * (double) (hNVars[i] - hDropidx[i] + 1);
+        }
+        // gemv d
+        flop += 2.0 * (double) M * (double) hNVars[i] + (double) M;
+        // gamma_tilde
+        flop += 2.0 * (double) hNVars[i];
+        // b update
+        flop += 3.0 * (double) hNVars[i];
+    }
+    // gemm cd
+    flop += 2.0 * (double) M * (double) N * (double) numModels;
+    // gamma
+    flop += 6.0 * (double) N;
+    // mu update
+    flop += 2.0 * (double) M;
+    // norm1 and norm2
+    flop += (double) N + 3.0 * (double) M;
+    return flop;
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 4) {
         printf("Insufficient parameters, required 3! (flatMriPath, numModels, numStreams)\n");
@@ -54,7 +93,7 @@ int main(int argc, char *argv[]) {
     
     // Declare all lars variables.
     int *nVars, *step, *lasso, *done, *lVars, *cidx, *act, *dropidx;
-    int *pivot, *info, *ctrl, *hNVars, *hctrl, *hdone, *hact;
+    int *pivot, *info, *ctrl, *hNVars, *hctrl, *hdone, *hact, *hLasso, *hDropidx;
     precision *alp[numModels], *bet[numModels], *ha1, *ha2;
     precision *y, *mu, *r, *beta, *c, *absC, *cmax, *betaOls, *d, *gamma, *cd, *a1, *a2;
     precision *XA[numModels], *G[numModels], *I[numModels], **dG, **dI;
@@ -92,7 +131,8 @@ int main(int argc, char *argv[]) {
 
     int top = numModels;
     double totalFlop = 0;
-    double totalTime = 0;
+    double transferTime = 0;
+    double execTime = 0;
 
     int bN = optimalBlock1D(N);
     int bM = optimalBlock1D(M);
@@ -111,6 +151,9 @@ int main(int argc, char *argv[]) {
     hdone = new int[numModels];
     ha1 = new precision[numModels];
     ha2 = new precision[numModels];
+    hLasso = new int[numModels];
+    hDropidx = new int[numModels];
+
     for (int i = 0; i < numModels; i++) {
         init_var<precision>(XA[i], M * M);
         init_var<precision>(G[i], M * M);
@@ -141,6 +184,7 @@ int main(int argc, char *argv[]) {
 
     printf("\rStack top at %d", top);
     while (true) {
+        timer.start();
         cudaMemset(ctrl, 0, 2 * sizeof(int));
         check(nVars, step, maxVariables,
               maxSteps, done, ctrl,
@@ -174,6 +218,10 @@ int main(int argc, char *argv[]) {
         if (hctrl[0] == 0) {
             break;
         }
+        timer.stop();
+        transferTime += timer.elapsed();
+        cudaMemcpy(hLasso, lasso, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(hDropidx, dropidx, numModels * sizeof(int), cudaMemcpyDeviceToHost);
         timer.start();
         mat_sub<precision>(y, mu, r,
                            numModels * M, *(new dim3(bModM)));
@@ -307,16 +355,8 @@ int main(int argc, char *argv[]) {
         final<precision>(a1, a2, cmax, r, step, done, numModels, 0.43, *(new dim3(bMod)));
         cudaDeviceSynchronize();
         timer.stop();
-        totalTime += timer.elapsed();
-        totalFlop += 4.0 * (double) numModels * (double) N * (double) M;
-        totalFlop += 7.0 * (double) numModels * (double) N;
-        totalFlop += 6.0 * (double) numModels * (double) M;
-        for (int i = 0; i < numModels; i++) {
-            totalFlop += 2.0 * (double) hNVars[i] * (double) hNVars[i] * (double) M;
-            totalFlop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
-            totalFlop += 4.0 * (double) hNVars[i] * (double) M + 2.0 * (double) hNVars[i] * (double) hNVars[i];
-            totalFlop += 5.0 * (double) hNVars[i];
-        }
+        execTime += timer.elapsed();
+        totalFlop += flopCounter(M, N, numModels, hNVars, hLasso, hDropidx);
     }
     printf("\n");
 
@@ -359,6 +399,9 @@ int main(int argc, char *argv[]) {
     // for (int i = 0; i < totalModels; i++) {
     //     printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
     // }
-    printf("Gflops = %f\n", (totalFlop * 1.0e-9) / (totalTime * 1.0e-3));
+    printf("Execution time = %f\n", execTime * 1.0e-3);
+    printf("Transfer time = %f\n", transferTime * 1.0e-3);
+    printf("Total Gflop count = %f\n", totalFlop * 1.0e-9);
+    printf("Computational Gflops = %f\n", (totalFlop * 1.0e-9) / (execTime * 1.0e-3));
     return 0;
 }

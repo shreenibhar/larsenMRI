@@ -45,16 +45,13 @@ while length(A) < maxVariables && step < maxSteps
 		gamma = 1;
 	else
 		cd = X'*d;
-		temp = [(c - cmax) ./ (cd - cmax) (c + cmax) ./ (cd + cmax)];
-		temp(temp <= 0) = inf;
-		temp(A) = inf;
-		temp = min(temp')';
-		[temp temp_idx] = min(temp);
+		temp = [(c - cmax) ./ (cd - cmax); (c + cmax) ./ (cd + cmax)];
+		temp = sort(temp(temp > 0));
 		if isempty(temp)
 			printf('Error no +ve direction\n');
 			return;
 		end
-		gamma = temp;
+		gamma = temp(1);
 	end
 
 	if gamma_tilde < gamma
