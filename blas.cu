@@ -141,7 +141,7 @@ void SatomicMax(float *address, float val) {
     unsigned int old = *address_as_uint, assumed;
     do {
         assumed = old;
-        old = atomicCAS(address_as_uint, assumed, __float_as_int(max(val, __int_as_float(assumed))));
+        old = atomicCAS(address_as_uint, assumed, __float_as_int(fmaxf(val, __int_as_float(assumed))));
     } while (assumed != old);
     return;
 }
@@ -152,7 +152,7 @@ void DatomicMax(double *address, double val) {
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
-        old = atomicCAS(address_as_ull, assumed, __double_as_longlong(max(val, __longlong_as_double(assumed))));
+        old = atomicCAS(address_as_ull, assumed, __double_as_longlong(fmax(val, __longlong_as_double(assumed))));
     } while (assumed != old);
     return;
 }
@@ -163,7 +163,7 @@ void SatomicMin(float *address, float val) {
     unsigned int old = *address_as_uint, assumed;
     do {
         assumed = old;
-        old = atomicCAS(address_as_uint, assumed, __float_as_int(min(val, __int_as_float(assumed))));
+        old = atomicCAS(address_as_uint, assumed, __float_as_int(fminf(val, __int_as_float(assumed))));
     } while (assumed != old);
     return;
 }
@@ -174,24 +174,15 @@ void DatomicMin(double *address, double val) {
     unsigned long long int old = *address_as_ull, assumed;
     do {
         assumed = old;
-        old = atomicCAS(address_as_ull, assumed, __double_as_longlong(min(val, __longlong_as_double(assumed))));
+        old = atomicCAS(address_as_ull, assumed, __double_as_longlong(fmin(val, __longlong_as_double(assumed))));
     } while (assumed != old);
     return;
 }
 
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600
+#else
 __device__
-void SatomicAdd(float *address, float val) {
-    unsigned int* address_as_uint = (unsigned int*)address;
-    unsigned int old = *address_as_uint, assumed;
-    do {
-        assumed = old;
-        old = atomicCAS(address_as_uint, assumed, __float_as_int(val + __int_as_float(assumed)));
-    } while (assumed != old);
-    return;
-}
-
-__device__
-void DatomicAdd(double *address, double val) {
+void atomicAdd(double *address, double val) {
     unsigned long long int* address_as_ull = (unsigned long long int*)address;
     unsigned long long int old = *address_as_ull, assumed;
     do {
@@ -200,6 +191,7 @@ void DatomicAdd(double *address, double val) {
     } while (assumed != old);
     return;
 }
+#endif
 
 __global__
 void SamaxFabs_kernel(float *array, float *cmax, int elements) {
@@ -207,12 +199,12 @@ void SamaxFabs_kernel(float *array, float *cmax, int elements) {
     int tid = threadIdx.x;
     int gid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    smem[tid] = (gid < elements)? fabs(array[gid]): 0;
+    smem[tid] = (gid < elements)? fabsf(array[gid]): 0;
     __syncthreads();
 
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s && gid < elements)
-            smem[tid] = max(smem[tid], smem[tid + s]);
+            smem[tid] = fmaxf(smem[tid], smem[tid + s]);
         __syncthreads();
     }
     if (tid == 0) {
@@ -231,7 +223,7 @@ void DamaxFabs_kernel(double *array, double *cmax, int elements) {
 
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s && gid < elements)
-            smem[tid] = max(smem[tid], smem[tid + s]);
+            smem[tid] = fmax(smem[tid], smem[tid + s]);
         __syncthreads();
     }
     if (tid == 0) {
@@ -276,7 +268,7 @@ void SminCd_kernel(float *c, float *cd, float *cmax, float *r, int N) {
 
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s && gid < N)
-            smem[tid] = min(smem[tid], smem[tid + s]);
+            smem[tid] = fminf(smem[tid], smem[tid + s]);
         __syncthreads();
     }
     if (tid == 0) {
@@ -309,7 +301,7 @@ void DminCd_kernel(double *c, double *cd, double *cmax, double *r, int N) {
 
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s && gid < N)
-            smem[tid] = min(smem[tid], smem[tid + s]);
+            smem[tid] = fmin(smem[tid], smem[tid + s]);
         __syncthreads();
     }
     if (tid == 0) {
@@ -342,7 +334,7 @@ void Snorm2_kernel(float *y, float *mu, float *a2, int M) {
         __syncthreads();
     }
     if (tid == 0) {
-        SatomicAdd(a2, smem[0]);
+        atomicAdd(a2, smem[0]);
     }
 }
 
@@ -361,7 +353,7 @@ void Dnorm2_kernel(double *y, double *mu, double *a2, int M) {
         __syncthreads();
     }
     if (tid == 0) {
-        DatomicAdd(a2, smem[0]);
+        atomicAdd(a2, smem[0]);
     }
 }
 
@@ -381,7 +373,7 @@ void Snorm1_kernel(float *beta, float *a1, int N) {
     int tid = threadIdx.x;
     int gid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    smem[tid] = (gid < N)? fabs(beta[gid]): 0;
+    smem[tid] = (gid < N)? fabsf(beta[gid]): 0;
     __syncthreads();
 
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -390,7 +382,7 @@ void Snorm1_kernel(float *beta, float *a1, int N) {
         __syncthreads();
     }
     if (tid == 0) {
-        SatomicAdd(a1, smem[0]);
+        atomicAdd(a1, smem[0]);
     }
 }
 
@@ -409,7 +401,7 @@ void Dnorm1_kernel(double *beta, double *a1, int N) {
         __syncthreads();
     }
     if (tid == 0) {
-        DatomicAdd(a1, smem[0]);
+        atomicAdd(a1, smem[0]);
     }
 }
 
