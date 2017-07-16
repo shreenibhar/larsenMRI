@@ -249,7 +249,8 @@ int main(int argc, char *argv[]) {
         times[3] += timer.elapsed();
         timer.start();
         for (int i = 0; i < numModels; i++) {
-            amaxFabs(c + i * N, cmax + i, N, streams[i & (numStreams - 1)], *(new dim3(1024)));
+            cublasSetStream(hnd, streams[i & (numStreams - 1)]);
+            amaxFabs(c + i * N, cmax + i, buf[i], N, streams[i & (numStreams - 1)], *(new dim3(1024)));
         }
         cudaDeviceSynchronize();
         timer.stop();
@@ -380,7 +381,7 @@ int main(int argc, char *argv[]) {
         times[17] += timer.elapsed();
         timer.start();
         for (int i = 0; i < numModels; i++) {
-            minCd(c + i * N, cd + i * N, cmax + i, r + i, N, streams[i & (numStreams - 1)], *(new dim3(1024)));
+            minCd(c + i * N, cd + i * N, cmax + i, r + i, buf[i], N, streams[i & (numStreams - 1)], *(new dim3(1024)));
         }
         cudaDeviceSynchronize();
         timer.stop();
@@ -408,7 +409,7 @@ int main(int argc, char *argv[]) {
         times[21] += timer.elapsed();
         timer.start();
         for (int i = 0; i < numModels; i++) {
-            norm2(y + i * M, mu + i * M, r + i,
+            norm2(y + i * M, mu + i * M, r + i, buf[i],
                   M, streams[i & (numStreams - 1)], *(new dim3(512)));
         }
         cudaDeviceSynchronize();
@@ -416,7 +417,7 @@ int main(int argc, char *argv[]) {
         times[22] += timer.elapsed();
         timer.start();
         for (int i = 0; i < numModels; i++) {
-            norm1(beta + i * N, cmax + i, N,
+            norm1(beta + i * N, cmax + i, buf[i], N,
                   streams[i & (numStreams - 1)], *(new dim3(1024)));
         }
         cudaDeviceSynchronize();
@@ -471,9 +472,9 @@ int main(int argc, char *argv[]) {
     cudaFree(dG);
     cudaFree(dI);
 
-    // for (int i = 0; i < totalModels; i++) {
-    //     printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
-    // }
+    for (int i = 0; i < 10; i++) {
+        printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
+    }
     for (int i = 0; i < 25; i++) {
         printf("Kernel %2d time = %10.4f\n", i, times[i]);
     }

@@ -57,22 +57,22 @@ void amin(cublasHandle_t handle, int n, const float *x,
 void amin(cublasHandle_t handle, int n, const double *x,
 		  int incx, int *result);
 
-void amaxFabs(float *array, float *cmax, int elements, cudaStream_t stream, dim3 blockDim);
+void amaxFabs(float *array, float *cmax, float *buf, int elements, cudaStream_t stream, dim3 blockDim);
 
-void amaxFabs(double *array, double *cmax, int elements, cudaStream_t stream, dim3 blockDim);
+void amaxFabs(double *array, double *cmax, double *buf, int elements, cudaStream_t stream, dim3 blockDim);
 
 //------------------------------------
 
-void minCd(float *c, float *cd, float *cmax, float *r, int N, cudaStream_t stream, dim3 blockDim);
+void minCd(float *c, float *cd, float *cmax, float *r, float *buf, int N, cudaStream_t stream, dim3 blockDim);
 
-void minCd(double *c, double *cd, double *cmax, double *r, int N, cudaStream_t stream, dim3 blockDim);
+void minCd(double *c, double *cd, double *cmax, double *r, double *buf, int N, cudaStream_t stream, dim3 blockDim);
 
-void norm2(float *y, float *mu, float *a2, int M, cudaStream_t stream, dim3 blockDim);
+void norm2(float *y, float *mu, float *a2, float *buf, int M, cudaStream_t stream, dim3 blockDim);
 
-void norm2(double *y, double *mu, double *a2, int M, cudaStream_t stream, dim3 blockDim);
+void norm2(double *y, double *mu, double *a2, double *buf, int M, cudaStream_t stream, dim3 blockDim);
 
-void norm1(float *beta, float *a1, int N, cudaStream_t stream, dim3 blockDim);
+void norm1(float *beta, float *a1, float *buf, int N, cudaStream_t stream, dim3 blockDim);
 
-void norm1(double *beta, double *a1, int N, cudaStream_t stream, dim3 blockDim);
+void norm1(double *beta, double *a1, double *buf, int N, cudaStream_t stream, dim3 blockDim);
 
 #endif
