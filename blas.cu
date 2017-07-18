@@ -148,300 +148,158 @@ struct SharedMemory<double> {
 
 template<typename T>
 __global__
-void maxReduce_kernel(T *array, T *buf, int elements) {
+void fabsMaxReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
     T *smem = SharedMemory<T>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid = threadIdx.y;
+    int col = threadIdx.y + blockIdx.y * blockDim.y;
 
-    smem[tid] = (gid < elements)? array[gid]: -50000;
+    smem[tid] = (row < rowSize && col < colSize)? fabs(mat[row * colSize + col]): 0;
     __syncthreads();
 
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < elements)
-            smem[tid] = fmax(smem[tid], smem[tid + s]);
+    for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
+        if (tid < s && col < colSize)
+            smem[tid] = max(smem[tid], smem[tid + s]);
         __syncthreads();
     }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
+    if (tid == 0 && row < rowSize) {
+        buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
 
 template<typename T>
-__global__
-void minReduce_kernel(T *array, T *buf, int elements) {
-    T *smem = SharedMemory<T>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
+void fabsMaxReduce(T *mat, T *res, T *buf, int rowSize, int colSize) {
+    dim3 blockDim(1, 1024);
+    dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
+    fabsMaxReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(mat, buf, rowSize, colSize);
+    colSize = gridDim.y;
+    blockDim = *new dim3(1, next_pow2(colSize));
+    gridDim = *new dim3(rowSize, 1);
+    fabsMaxReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, res, rowSize, colSize);
+}
 
-    smem[tid] = (gid < elements)? array[gid]: 50000;
+template void fabsMaxReduce<float>(float *mat, float *res, float *buf, int rowSize, int colSize);
+template void fabsMaxReduce<double>(double *mat, double *res, double *buf, int rowSize, int colSize);
+
+template<typename T>
+__global__
+void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, int opt) {
+    T *smem = SharedMemory<T>();
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid = threadIdx.y;
+    int col = threadIdx.y + blockIdx.y * blockDim.y;
+
+    smem[tid] = (row < rowSize && col < colSize)? c[row * colSize + col]: 50000;
+    if (row < rowSize && col < colSize && opt) {
+        if (smem[tid] != 0) {
+            T a = (smem[tid] - cmax[row]) / (cd[row * colSize + col] - cmax[row]);
+            T b = (smem[tid] + cmax[row]) / (cd[row * colSize + col] + cmax[row]);
+            a = (a <= 0)? 50000: a;
+            b = (b <= 0)? 50000: b;
+            smem[tid] = min(a, b);
+        }
+        else {
+            smem[tid] = 50000;
+        }
+    }
     __syncthreads();
 
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < elements)
-            smem[tid] = fmin(smem[tid], smem[tid + s]);
+    for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
+        if (tid < s && col < colSize)
+            smem[tid] = min(smem[tid], smem[tid + s]);
         __syncthreads();
     }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
+    if (tid == 0 && row < rowSize) {
+        buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
 
 template<typename T>
+void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize) {
+    dim3 blockDim(1, 1024);
+    dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
+    cdMinReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(c, cd, cmax, buf, rowSize, colSize, 1);
+    colSize = gridDim.y;
+    blockDim = *new dim3(1, next_pow2(colSize));
+    gridDim = *new dim3(rowSize, 1);
+    cdMinReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, NULL, NULL, res, rowSize, colSize, 0);
+}
+
+template void cdMinReduce<float>(float *c, float *cd, float *cmax, float *res, float *buf, int rowSize, int colSize);
+template void cdMinReduce<double>(double *c, double *cd, double *cmax, double *res, double *buf, int rowSize, int colSize);
+
+template<typename T>
 __global__
-void addReduce_kernel(T *array, T *buf, int elements) {
+void fabsAddReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
     T *smem = SharedMemory<T>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid = threadIdx.y;
+    int col = threadIdx.y + blockIdx.y * blockDim.y;
 
-    smem[tid] = (gid < elements)? array[gid]: 0;
+    smem[tid] = (row < rowSize && col < colSize)? fabs(mat[row * colSize + col]): 0;
     __syncthreads();
 
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < elements)
+    for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
+        if (tid < s && col < colSize)
             smem[tid] += smem[tid + s];
         __syncthreads();
     }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
+    if (tid == 0 && row < rowSize) {
+        buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
 
-__global__
-void SamaxFabs_kernel(float *array, float *buf, int elements) {
-    float *smem = SharedMemory<float>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
+template<typename T>
+void fabsAddReduce(T *mat, T *res, T *buf, int rowSize, int colSize) {
+    dim3 blockDim(1, 1024);
+    dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
+    fabsAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(mat, buf, rowSize, colSize);
+    colSize = gridDim.y;
+    blockDim = *new dim3(1, next_pow2(colSize));
+    gridDim = *new dim3(rowSize, 1);
+    fabsAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, res, rowSize, colSize);
+}
 
-    smem[tid] = (gid < elements)? fabsf(array[gid]): 0;
+template void fabsAddReduce<float>(float *mat, float *res, float *buf, int rowSize, int colSize);
+template void fabsAddReduce<double>(double *mat, double *res, double *buf, int rowSize, int colSize);
+
+template<typename T>
+__global__
+void sqrAddReduce_kernel(T *y, T *mu, T *buf, int rowSize, int colSize, int opt) {
+    T *smem = SharedMemory<T>();
+    int row = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid = threadIdx.y;
+    int col = threadIdx.y + blockIdx.y * blockDim.y;
+
+    smem[tid] = (row < rowSize && col < colSize)? y[row * colSize + col]: 0;
+    if (row < rowSize && col < colSize && opt) {
+        smem[tid] -= mu[row * colSize + col];
+        smem[tid] *= smem[tid];
+    }
     __syncthreads();
 
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < elements)
-            smem[tid] = fmaxf(smem[tid], smem[tid + s]);
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-__global__
-void DamaxFabs_kernel(double *array, double *buf, int elements) {
-    double *smem = SharedMemory<double>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    smem[tid] = (gid < elements)? fabs(array[gid]): 0;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < elements)
-            smem[tid] = fmax(smem[tid], smem[tid + s]);
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-void amaxFabs(float *array, float *cmax, float *buf, int elements, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((elements + blockDim.x - 1) / blockDim.x);
-    SamaxFabs_kernel<<<gridDim, blockDim, blockDim.x * sizeof(float), stream>>>(array, buf, elements);
-    int grid_size = next_pow2(gridDim.x);
-    maxReduce_kernel<float><<<1, grid_size, grid_size * sizeof(float), stream>>>(buf, cmax, gridDim.x);
-}
-
-void amaxFabs(double *array, double *cmax, double *buf, int elements, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((elements + blockDim.x - 1) / blockDim.x);
-    DamaxFabs_kernel<<<gridDim, blockDim, blockDim.x * sizeof(double), stream>>>(array, buf, elements);
-    int grid_size = next_pow2(gridDim.x);
-    maxReduce_kernel<double><<<1, grid_size, grid_size * sizeof(double), stream>>>(buf, cmax, gridDim.x);
-}
-
-//------------------------------------
-
-__global__
-void SminCd_kernel(float *c, float *cd, float *cmax, float *buf, int N) {
-    float *smem = SharedMemory<float>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    float val = 50000;
-    if (gid < N) {
-        val = c[gid];
-        if (val != 0) {
-            float a = (val - *cmax) / (cd[gid] - *cmax);
-            float b = (val + *cmax) / (cd[gid] + *cmax);
-            a = (a <= 0)? 50000: a;
-            b = (b <= 0)? 50000: b;
-            val = min(a, b);
-        }
-        else {
-            val = 50000;
-        }
-    }
-    smem[tid] = val;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < N)
-            smem[tid] = fminf(smem[tid], smem[tid + s]);
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-__global__
-void DminCd_kernel(double *c, double *cd, double *cmax, double *buf, int N) {
-    double *smem = SharedMemory<double>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    double val = 50000;
-    if (gid < N) {
-        val = c[gid];
-        if (val != 0) {
-            double a = (val - *cmax) / (cd[gid] - *cmax);
-            double b = (val + *cmax) / (cd[gid] + *cmax);
-            a = (a <= 0)? 50000: a;
-            b = (b <= 0)? 50000: b;
-            val = min(a, b);
-        }
-        else {
-            val = 50000;
-        }
-    }
-    smem[tid] = val;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < N)
-            smem[tid] = fmin(smem[tid], smem[tid + s]);
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-void minCd(float *c, float *cd, float *cmax, float *r, float *buf, int N, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-    SminCd_kernel<<<gridDim, blockDim, blockDim.x * sizeof(float), stream>>>(c, cd, cmax, buf, N);
-    int grid_size = next_pow2(gridDim.x);
-    minReduce_kernel<float><<<1, grid_size, grid_size * sizeof(float), stream>>>(buf, r, gridDim.x);
-}
-
-void minCd(double *c, double *cd, double *cmax, double *r, double *buf, int N, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-    DminCd_kernel<<<gridDim, blockDim, blockDim.x * sizeof(double), stream>>>(c, cd, cmax, buf, N);
-    int grid_size = next_pow2(gridDim.x);
-    minReduce_kernel<double><<<1, grid_size, grid_size * sizeof(double), stream>>>(buf, r, gridDim.x);
-}
-
-__global__
-void Snorm2_kernel(float *y, float *mu, float *buf, int M) {
-    float *smem = SharedMemory<float>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    smem[tid] = (gid < M)? (y[gid] - mu[gid]) * (y[gid] - mu[gid]): 0;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < M)
+    for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
+        if (tid < s && col < colSize)
             smem[tid] += smem[tid + s];
         __syncthreads();
     }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
+    if (tid == 0 && row < rowSize) {
+        buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
 
-__global__
-void Dnorm2_kernel(double *y, double *mu, double *buf, int M) {
-    double *smem = SharedMemory<double>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    smem[tid] = (gid < M)? (y[gid] - mu[gid]) * (y[gid] - mu[gid]): 0;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < M)
-            smem[tid] += smem[tid + s];
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
+template<typename T>
+void sqrAddReduce(T *y, T *mu, T *res, T *buf, int rowSize, int colSize) {
+    dim3 blockDim(1, 1024);
+    dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
+    sqrAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(y, mu, buf, rowSize, colSize, 1);
+    colSize = gridDim.y;
+    blockDim = *new dim3(1, next_pow2(colSize));
+    gridDim = *new dim3(rowSize, 1);
+    sqrAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, NULL, res, rowSize, colSize, 0);
 }
 
-void norm2(float *y, float *mu, float *a2, float *buf, int M, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((M + blockDim.x - 1) / blockDim.x);
-    Snorm2_kernel<<<gridDim, blockDim, blockDim.x * sizeof(float), stream>>>(y, mu, buf, M);
-    int grid_size = next_pow2(gridDim.x);
-    addReduce_kernel<float><<<1, grid_size, grid_size * sizeof(float), stream>>>(buf, a2, gridDim.x);
-}
-
-void norm2(double *y, double *mu, double *a2, double *buf, int M, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((M + blockDim.x - 1) / blockDim.x);
-    Dnorm2_kernel<<<gridDim, blockDim, blockDim.x * sizeof(double), stream>>>(y, mu, buf, M);
-    int grid_size = next_pow2(gridDim.x);
-    addReduce_kernel<double><<<1, grid_size, grid_size * sizeof(double), stream>>>(buf, a2, gridDim.x);
-}
-
-__global__
-void Snorm1_kernel(float *beta, float *buf, int N) {
-    float *smem = SharedMemory<float>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    smem[tid] = (gid < N)? fabsf(beta[gid]): 0;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < N)
-            smem[tid] += smem[tid + s];
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-__global__
-void Dnorm1_kernel(double *beta, double *buf, int N) {
-    double *smem = SharedMemory<double>();
-    int tid = threadIdx.x;
-    int gid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    smem[tid] = (gid < N)? fabs(beta[gid]): 0;
-    __syncthreads();
-
-    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s && gid < N)
-            smem[tid] += smem[tid + s];
-        __syncthreads();
-    }
-    if (tid == 0) {
-        buf[blockIdx.x] = smem[0];
-    }
-}
-
-void norm1(float *beta, float *a1, float *buf, int N, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-    Snorm1_kernel<<<gridDim, blockDim, blockDim.x * sizeof(float), stream>>>(beta, buf, N);
-    int grid_size = next_pow2(gridDim.x);
-    addReduce_kernel<float><<<1, grid_size, grid_size * sizeof(float), stream>>>(buf, a1, gridDim.x);
-}
-
-void norm1(double *beta, double *a1, double *buf, int N, cudaStream_t stream, dim3 blockDim) {
-    dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-    Dnorm1_kernel<<<gridDim, blockDim, blockDim.x * sizeof(double), stream>>>(beta, buf, N);
-    int grid_size = next_pow2(gridDim.x);
-    addReduce_kernel<double><<<1, grid_size, grid_size * sizeof(double), stream>>>(buf, a1, gridDim.x);
-}
+template void sqrAddReduce<float>(float *y, float *mu, float *res, float *buf, int rowSize, int colSize);
+template void sqrAddReduce<double>(double *y, double *mu, double *res, double *buf, int rowSize, int colSize);
 
 #endif
