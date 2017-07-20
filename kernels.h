@@ -27,7 +27,7 @@ void mat_sub(T *a, T *b, T *c,
              int size, dim3 blockDim);
 
 template<typename T>
-void exclude(T *absC, T *cmax, int *lVars, int *nVars,
+void exclude(T *absC, int *lVars, int *nVars,
              int *act, int M, int N,
              int numModels, T def, dim3 blockDim);
 
@@ -44,7 +44,7 @@ void gather(T *XA, T *X, int *lVars,
             int mod, cudaStream_t stream, dim3 blockDim);
 
 template<typename T>
-void gammat(T *gamma, T *beta, T *betaOls, T *cmax,
+void gammat(T *gamma, T *beta, T *betaOls,
             int *lVars, int *nVars, int M,
             int N, int numModels, dim3 blockDim);
 
@@ -65,11 +65,6 @@ void update(T *beta, T *mu, T *d, T *a1, T *a2,
 
 void drop(int *lVars, int *dropidx, int *nVars,
           int *lasso, int M, int numModels);
-
-template<typename T>
-void residue(T *beta, T *y, T *mu,
-             T *cd, T *r, int M,
-             int N, int numModels, dim3 blockDim);
 
 template<typename T>
 void final(T *a1, T *a2, T *cmax, T *r, int *step,

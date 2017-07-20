@@ -128,7 +128,7 @@ template void mat_sub<double>(double *a, double *b, double *c,
 
 template<typename T>
 __global__
-void exclude_kernel(T *absC, T *cmax, int *lVars, int *nVars,
+void exclude_kernel(T *absC, int *lVars, int *nVars,
                     int *act, int M, int N,
                     int numModels, T def) {
     int ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -137,10 +137,7 @@ void exclude_kernel(T *absC, T *cmax, int *lVars, int *nVars,
     if (mod < numModels) {
         int ni = nVars[mod];
         if (ind == M - 1) {
-            int hact = (act == NULL)? -1: act[mod];
-            if (hact != -1)
-                absC[mod * N + hact] = def;
-            cmax[mod] = 0;
+            absC[mod * N + act[mod]] = def;
         }
         if (ind < ni) {
             int li = lVars[mod * M + ind];
@@ -150,19 +147,19 @@ void exclude_kernel(T *absC, T *cmax, int *lVars, int *nVars,
 }
 
 template<typename T>
-void exclude(T *absC, T *cmax, int *lVars, int *nVars,
+void exclude(T *absC, int *lVars, int *nVars,
              int *act, int M, int N,
              int numModels, T def, dim3 blockDim) {
     dim3 gridDim((numModels * M + blockDim.x - 1) / blockDim.x);
-    exclude_kernel<T><<<gridDim, blockDim>>>(absC, cmax, lVars, nVars,
+    exclude_kernel<T><<<gridDim, blockDim>>>(absC, lVars, nVars,
                                              act, M, N,
                                              numModels, def);
 }
 
-template void exclude<float>(float *absC, float *cmax, int *lVars, int *nVars,
+template void exclude<float>(float *absC, int *lVars, int *nVars,
                              int *act, int M, int N,
                              int numModels, float def, dim3 blockDim);
-template void exclude<double>(double *absC, double *cmax, int *lVars, int *nVars,
+template void exclude<double>(double *absC, int *lVars, int *nVars,
                               int *act, int M, int N,
                               int numModels, double def, dim3 blockDim);
 
@@ -256,7 +253,7 @@ template void gather<double>(double *XA, double *X, int *lVars,
 
 template<typename T>
 __global__
-void gammat_kernel(T *gamma, T *beta, T *betaOls, T *cmax,
+void gammat_kernel(T *gamma, T *beta, T *betaOls,
                    int *lVars, int *nVars, int M,
                    int N, int numModels) {
     int ind = threadIdx.x + blockIdx.x * blockDim.x;
@@ -270,29 +267,26 @@ void gammat_kernel(T *gamma, T *beta, T *betaOls, T *cmax,
             val = (val <= 0)? inf: val;
             gamma[mod * M + ind] = val;
         }
-        else if (ind == 0 && ni - 1 <= 0) {
+        else if (ind == 0 && ni -1 <= 0) {
             gamma[mod * M + ind] = inf;
-        }
-        else if (ind == M - 1) {
-            cmax[mod] = 50000;
         }
     }
 }
 
 template<typename T>
-void gammat(T *gamma, T *beta, T *betaOls, T *cmax,
+void gammat(T *gamma, T *beta, T *betaOls,
             int *lVars, int *nVars, int M,
             int N, int numModels, dim3 blockDim) {
     dim3 gridDim((numModels * M + blockDim.x - 1) / blockDim.x);
-    gammat_kernel<T><<<gridDim, blockDim>>>(gamma, beta, betaOls, cmax,
+    gammat_kernel<T><<<gridDim, blockDim>>>(gamma, beta, betaOls,
                                             lVars, nVars, M,
                                             N, numModels);
 }
 
-template void gammat<float>(float *gamma, float *beta, float *betaOls, float *cmax,
+template void gammat<float>(float *gamma, float *beta, float *betaOls,
                             int *lVars, int *nVars, int M,
                             int N, int numModels, dim3 blockDim);
-template void gammat<double>(double *gamma, double *beta, double *betaOls, double *cmax,
+template void gammat<double>(double *gamma, double *beta, double *betaOls,
                              int *lVars, int *nVars, int M,
                              int N, int numModels, dim3 blockDim);
 
@@ -403,41 +397,6 @@ void drop(int *lVars, int *dropidx, int *nVars,
     drop_kernel<<<numModels, M>>>(lVars, dropidx, nVars,
                                   lasso, M, numModels);
 }
-
-template<typename T>
-__global__
-void residue_kernel(T *beta, T *y, T *mu,
-                    T *cd, T *r, int M,
-                    int N, int numModels) {
-    int ind = threadIdx.x + blockIdx.x * blockDim.x;
-    int mod = ind / N;
-    ind -= mod * N;
-    if (mod < numModels) {
-        if (ind < M) {
-            r[mod * M + ind] = y[mod * M + ind] - mu[mod * M + ind];
-        }
-        if (ind < N) {
-            cd[mod * N + ind] = fabs(beta[mod * N + ind]);
-        }
-    }
-}
-
-template<typename T>
-void residue(T *beta, T *y, T *mu,
-             T *cd, T *r, int M,
-             int N, int numModels, dim3 blockDim) {
-    dim3 gridDim((numModels * N + blockDim.x - 1) / blockDim.x);
-    residue_kernel<T><<<gridDim, blockDim>>>(beta, y, mu,
-                                             cd, r, M,
-                                             N, numModels);
-}
-
-template void residue<float>(float *beta, float *y, float *mu,
-                             float *cd, float *r, int M,
-                             int N, int numModels, dim3 blockDim);
-template void residue<double>(double *beta, double *y, double *mu,
-                              double *cd, double *r, int M,
-                              int N, int numModels, dim3 blockDim);
 
 template<typename T>
 __global__

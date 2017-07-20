@@ -241,7 +241,7 @@ int main(int argc, char *argv[]) {
         timer.stop();
         times[2] += timer.elapsed();
         timer.start();
-        exclude<precision>(c, cmax, lVars, nVars,
+        exclude<precision>(c, lVars, nVars,
                            act, M, N,
                            numModels, 0, *(new dim3(bModM)));
         cudaDeviceSynchronize();
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
         timer.stop();
         times[14] += timer.elapsed();
         timer.start();
-        gammat<precision>(gamma, beta, betaOls, r,
+        gammat<precision>(gamma, beta, betaOls,
                           lVars, nVars, M,
                           N, numModels, *(new dim3(bModM)));
         cudaDeviceSynchronize();
@@ -462,7 +462,7 @@ int main(int argc, char *argv[]) {
     cudaFree(dI);
 
     // for (int i = 0; i < 10; i++) {
-        // printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
+    //     printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
     // }
     for (int i = 0; i < 25; i++) {
         printf("Kernel %2d time = %10.4f\n", i, times[i]);

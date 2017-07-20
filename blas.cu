@@ -290,7 +290,7 @@ void sqrAddReduce_kernel(T *y, T *mu, T *buf, int rowSize, int colSize, int opt)
 
 template<typename T>
 void sqrAddReduce(T *y, T *mu, T *res, T *buf, int rowSize, int colSize) {
-    dim3 blockDim(1, 1024);
+    dim3 blockDim(1, 512);
     dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
     sqrAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(y, mu, buf, rowSize, colSize, 1);
     colSize = gridDim.y;
