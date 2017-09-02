@@ -220,8 +220,6 @@ int main(int argc, char *argv[]) {
         if (hctrl[0] == 0) {
             break;
         }
-        cudaMemcpy(hLasso, lasso, numModels * sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemcpy(hDropidx, dropidx, numModels * sizeof(int), cudaMemcpyDeviceToHost);
         timer.stop();
         times[0] += timer.elapsed();
         timer.start();
@@ -265,8 +263,8 @@ int main(int argc, char *argv[]) {
         cudaDeviceSynchronize();
         timer.stop();
         times[6] += timer.elapsed();
-        timer.start();
         cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+        timer.start();
         for (int i = 0; i < numModels; i++) {
             gather<precision>(XA[i], X, lVars,
                               hNVars[i], M, N,
@@ -396,6 +394,8 @@ int main(int argc, char *argv[]) {
         cudaDeviceSynchronize();
         timer.stop();
         times[20] += timer.elapsed();
+        cudaMemcpy(hLasso, lasso, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+        cudaMemcpy(hDropidx, dropidx, numModels * sizeof(int), cudaMemcpyDeviceToHost);
         timer.start();
         drop(lVars, dropidx, nVars,
              lasso, M, numModels);

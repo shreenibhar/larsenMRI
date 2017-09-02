@@ -158,11 +158,11 @@ void fabsMaxReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
     __syncthreads();
 
     for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-        if (tid < s && col < colSize)
+        if (tid < s)
             smem[tid] = max(smem[tid], smem[tid + s]);
         __syncthreads();
     }
-    if (tid == 0 && row < rowSize) {
+    if (tid == 0) {
         buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
@@ -205,11 +205,11 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
     __syncthreads();
 
     for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-        if (tid < s && col < colSize)
+        if (tid < s)
             smem[tid] = min(smem[tid], smem[tid + s]);
         __syncthreads();
     }
-    if (tid == 0 && row < rowSize) {
+    if (tid == 0) {
         buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
@@ -240,11 +240,11 @@ void fabsAddReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
     __syncthreads();
 
     for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-        if (tid < s && col < colSize)
+        if (tid < s)
             smem[tid] += smem[tid + s];
         __syncthreads();
     }
-    if (tid == 0 && row < rowSize) {
+    if (tid == 0) {
         buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
@@ -279,11 +279,11 @@ void sqrAddReduce_kernel(T *y, T *mu, T *buf, int rowSize, int colSize, int opt)
     __syncthreads();
 
     for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-        if (tid < s && col < colSize)
+        if (tid < s)
             smem[tid] += smem[tid + s];
         __syncthreads();
     }
-    if (tid == 0 && row < rowSize) {
+    if (tid == 0) {
         buf[row * gridDim.y + blockIdx.y] = smem[0];
     }
 }
