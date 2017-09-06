@@ -31,40 +31,43 @@ int optimalBlock1D(int problemSize) {
 
 double flopCounter(int M, int N, int numModels, int *hNVars, int *hLasso, int *hDropidx) {
     double flop = 0;
-    // mat_sub r
+    // r = y - mu
     flop += (double) M * (double) numModels;
-    // gemm c
+    // c = X' * r
     flop += 2.0 * (double) M * (double) N * (double) numModels;
     for (int i = 0; i < numModels; i++) {
-        // XA' * y
-        flop += 2.0 * (double) M * hNVars[i];
-        // betaOls
-        flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+        // cholinsert
+        flop += 2 * (double) M;
+        flop += 2 * (double) (hNVars[i] - 1) * (double) M;
+        flop += 2 * (double) (hNVars[i] - 1) * (double) (hNVars[i] - 1);
+        flop += 2 * (double) (hNVars[i] - 1);
+        // b_OLS = R\(R'\(X(:,A)'*y))
+        flop += 2.0 * (double) M * (double) hNVars[i] + 4.0 * (double) hNVars[i] * (double) hNVars[i];
         // Inverse ops for R
         flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
-        if (hLasso[i] == 0) {
-            // cholInsert
-            flop += 3.0 * (double) hNVars[i] * (double) hNVars[i];
-        }
-        else {
-            // cholDelete
-            flop += 4.0 * (double) (hNVars[i] - hDropidx[i] + 1) * (double) (hNVars[i] - hDropidx[i] + 1);
-        }
-        // gemv d
+        // d = X(: , A) * b_OLS - mu
         flop += 2.0 * (double) M * (double) hNVars[i] + (double) M;
         // gamma_tilde
         flop += 2.0 * (double) hNVars[i];
         // b update
         flop += 3.0 * (double) hNVars[i];
+        // choldelete
+        if (hLasso[i]) {
+            flop += 4.0 * (hNVars[i] - hDropidx[i]) * (hNVars[i] - hDropidx[i]);
+            flop -= 2 * (double) M;
+            flop -= 2 * (double) (hNVars[i] - 2) * (double) M;
+            flop -= 2 * (double) (hNVars[i] - 2) * (double) (hNVars[i] - 2);
+            flop -= 2 * (double) (hNVars[i] - 2);
+        }
     }
-    // gemm cd
+    // cd = X'*d
     flop += 2.0 * (double) M * (double) N * (double) numModels;
     // gamma
-    flop += 6.0 * (double) N;
+    flop += 6.0 * (double) N * (double) numModels;
     // mu update
-    flop += 2.0 * (double) M;
+    flop += 2.0 * (double) M * (double) numModels;
     // norm1 and norm2
-    flop += (double) N + 3.0 * (double) M;
+    flop += ((double) N + 3.0 * (double) M) * (double) numModels;
     return flop;
 }
 
