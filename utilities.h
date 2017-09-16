@@ -9,31 +9,31 @@
 
 class IntegerTuple {
 public:
-    int M, N;
+	int M, N;
 };
 
 template<typename T>
 class Debug {
 public:
-    T a1;
-    T a2;
-    int nVars;
-    Debug() {a1 = -1; a2 = -1; nVars = -1;};
+	T a1;
+	T a2;
+	int nVars;
+	Debug() {a1 = -1; a2 = -1; nVars = -1;};
 };
 
 class GpuTimer {
 private:
-    cudaEvent_t startTime, stopTime;
+	cudaEvent_t startTime, stopTime;
 public:
-    GpuTimer();
+	GpuTimer();
 
-    ~GpuTimer();
+	~GpuTimer();
 
-    void start();
+	void start();
 
-    void stop();
+	void stop();
 
-    float elapsed();       
+	float elapsed();       
 };
 
 template<typename T>
