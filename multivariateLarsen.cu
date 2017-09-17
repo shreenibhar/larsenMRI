@@ -251,7 +251,7 @@ int main(int argc, char *argv[]) {
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[4] += timer.elapsed();
-		
+
 		timer.start();
 		set_cidx<precision>(cmax, cidx, c, N, numModels, *(new dim3(bModN)));
 		cudaDeviceSynchronize();

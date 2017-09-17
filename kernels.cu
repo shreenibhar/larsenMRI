@@ -113,7 +113,6 @@ void set_cidx_kernel(T *cmax, int *cidx, T *c, int N, int numModels) {
 	if (mod < numModels && ind < N) {
 		if (fabs(c[mod * N + ind]) == cmax[mod]) {
 			cidx[mod] = ind;
-			c[mod * N + ind] = 0;
 		}
 	}
 }
