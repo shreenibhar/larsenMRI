@@ -92,6 +92,96 @@ struct SharedMemory<double> {
 
 template<typename T>
 __global__
+void XAyBatched_kernel(T **XA, T *y, T *r, int *nVars, int M, int numModels) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	int ind = threadIdx.y + blockIdx.y * blockDim.y;
+	if (mod < numModels) {
+		int ni = nVars[mod];
+		T *smem = SharedMemory<T>();
+		smem[ind] = (ind < M)? y[mod * M + ind]: 0;
+		__syncthreads();
+		if (ind < ni) {
+			T val = 0;
+			for (int i = 0; i < M; i++) {
+				val += XA[mod][ind * M + i] * smem[i];
+			}
+			r[mod * M + ind] = val;
+		}
+	}
+}
+
+template<typename T>
+void XAyBatched(T **XA, T *y, T *r, int *nVars, int M, int numModels) {
+	dim3 blockDim(1, M);
+	dim3 gridDim(numModels, 1);
+	XAyBatched_kernel<T><<<gridDim, blockDim, M * sizeof(T)>>>(XA, y, r, nVars, M, numModels);
+}
+
+template void XAyBatched<float>(float **XA, float *y, float *r, int *nVars, int M, int numModels);
+template void XAyBatched<double>(double **XA, double *y, double *r, int *nVars, int M, int numModels);
+
+template<typename T>
+__global__
+void IrBatched_kernel(T **I, T *r, T *betaOls, int *nVars, int M, int numModels) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	int ind = threadIdx.y + blockIdx.y * blockDim.y;
+	if (mod < numModels) {
+		int ni = nVars[mod];
+		T *smem = SharedMemory<T>();
+		smem[ind] = (ind < ni)? r[mod * M + ind]: 0;
+		__syncthreads();
+		if (ind < ni) {
+			T val = 0;
+			for (int i = 0; i < ni; i++) {
+				val += I[mod][ind * ni + i] * smem[i];
+			}
+			betaOls[mod * M + ind] = val;
+		}
+	}
+}
+
+template<typename T>
+void IrBatched(T **I, T *r, T *betaOls, int *nVars, int M, int numModels, int maxVar) {
+	dim3 blockDim(1, maxVar);
+	dim3 gridDim(numModels, 1);
+	IrBatched_kernel<T><<<gridDim, blockDim, maxVar * sizeof(T)>>>(I, r, betaOls, nVars, M, numModels);
+}
+
+template void IrBatched<float>(float **I, float *r, float *betaOls, int *nVars, int M, int numModels, int maxVar);
+template void IrBatched<double>(double **I, double *r, double *betaOls, int *nVars, int M, int numModels, int maxVar);
+
+template<typename T>
+__global__
+void XAbetaOlsBatched_kernel(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	int ind = threadIdx.y + blockIdx.y * blockDim.y;
+	if (mod < numModels) {
+		int ni = nVars[mod];
+		T *smem = SharedMemory<T>();
+		if (ind < ni) smem[ind] = betaOls[mod * M + ind];
+		__syncthreads();
+		if (ind < M) {
+			T val = 0;
+			for (int i = 0; i < ni; i++) {
+				val += XA[mod][i * M + ind] * smem[i];
+			}
+			d[mod * M + ind] = val;
+		}
+	}
+}
+
+template<typename T>
+void XAbetaOlsBatched(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels, int maxVar) {
+	dim3 blockDim(1, M);
+	dim3 gridDim(numModels, 1);
+	XAbetaOlsBatched_kernel<T><<<gridDim, blockDim, maxVar * sizeof(T)>>>(XA, betaOls, d, nVars, M, numModels);
+}
+
+template void XAbetaOlsBatched<float>(float **XA, float *betaOls, float *d, int *nVars, int M, int numModels, int maxVar);
+template void XAbetaOlsBatched<double>(double **XA, double *betaOls, double *d, int *nVars, int M, int numModels, int maxVar);
+
+template<typename T>
+__global__
 void fabsMaxReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
 	T *smem = SharedMemory<T>();
 	int row = threadIdx.x + blockIdx.x * blockDim.x;
@@ -112,7 +202,7 @@ void fabsMaxReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
 
 template<typename T>
 void fabsMaxReduce(T *mat, T *res, T *buf, int rowSize, int colSize) {
-	dim3 blockDim(1, 1024);
+	dim3 blockDim(1, 512);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
 	fabsMaxReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(mat, buf, rowSize, colSize);
 	colSize = gridDim.y;
@@ -158,7 +248,7 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
 
 template<typename T>
 void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize) {
-	dim3 blockDim(1, 1024);
+	dim3 blockDim(1, 512);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
 	cdMinReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(c, cd, cmax, buf, rowSize, colSize, 1);
 	colSize = gridDim.y;
@@ -192,7 +282,7 @@ void fabsAddReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
 
 template<typename T>
 void fabsAddReduce(T *mat, T *res, T *buf, int rowSize, int colSize) {
-	dim3 blockDim(1, 1024);
+	dim3 blockDim(1, 512);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
 	fabsAddReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(mat, buf, rowSize, colSize);
 	colSize = gridDim.y;
@@ -241,5 +331,35 @@ void sqrAddReduce(T *y, T *mu, T *res, T *buf, int rowSize, int colSize) {
 
 template void sqrAddReduce<float>(float *y, float *mu, float *res, float *buf, int rowSize, int colSize);
 template void sqrAddReduce<double>(double *y, double *mu, double *res, double *buf, int rowSize, int colSize);
+
+template<typename T>
+__global__
+void minGamma_kernel(T *gamma_tilde, int *dropidx, int *nVars, int numModels, int M) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	if (mod < numModels) {
+		int ni = nVars[mod];
+		T miner = gamma_tilde[mod * M + 0];
+		int drop = 1;
+		if (ni > 1) {
+			for (int i = 1; i < ni - 1; i++) {
+				T val = gamma_tilde[mod * M  + i];
+				if (val < miner) {
+					miner = val;
+					drop = i + 1;
+				}
+			}
+		}
+		dropidx[mod] = drop;
+	}
+}
+
+template<typename T>
+void minGamma(T *gamma_tilde, int *dropidx, int *nVars, int numModels, int M, dim3 blockDim) {
+	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
+	minGamma_kernel<T><<<gridDim, blockDim>>>(gamma_tilde, dropidx, nVars, numModels, M);
+}
+
+template void minGamma<float>(float *gamma_tilde, int *dropidx, int *nVars, int numModels, int M, dim3 blockDim);
+template void minGamma<double>(double *gamma_tilde, int *dropidx, int *nVars, int numModels, int M, dim3 blockDim);
 
 #endif

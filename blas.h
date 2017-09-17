@@ -30,6 +30,15 @@ void amin(cublasHandle_t handle, int n, const float *x, int incx, int *result);
 void amin(cublasHandle_t handle, int n, const double *x, int incx, int *result);
 
 template<typename T>
+void XAyBatched(T **XA, T *y, T *r, int *nVars, int M, int numModels);
+
+template<typename T>
+void IrBatched(T **I, T *r, T *betaOls, int *nVars, int M, int numModels, int maxVar);
+
+template<typename T>
+void XAbetaOlsBatched(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels, int maxVar);
+
+template<typename T>
 void fabsMaxReduce(T *mat, T *res, T *buf, int rowSize, int colSize);
 
 template<typename T>
@@ -40,5 +49,8 @@ void fabsAddReduce(T *mat, T *res, T *buf, int rowSize, int colSize);
 
 template<typename T>
 void sqrAddReduce(T *y, T *mu, T *res, T *buf, int rowSize, int colSize);
+
+template<typename T>
+void minGamma(T *gamma_tilde, int *dropidx, int *nVars, int numModels, int M, dim3 blockDim);
 
 #endif
