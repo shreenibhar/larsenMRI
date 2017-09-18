@@ -104,28 +104,6 @@ void exclude(T *absC, int *lVars, int *nVars, int *act, int M, int N, int numMod
 template void exclude<float>(float *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, float def, dim3 blockDim);
 template void exclude<double>(double *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, double def, dim3 blockDim);
 
-template<typename T>
-__global__
-void set_cidx_kernel(T *cmax, int *cidx, T *c, int N, int numModels) {
-	int ind = threadIdx.x + blockIdx.x * blockDim.x;
-	int mod = ind / N;
-	ind -= mod * N;
-	if (mod < numModels && ind < N) {
-		if (fabs(c[mod * N + ind]) == cmax[mod]) {
-			cidx[mod] = ind;
-		}
-	}
-}
-
-template<typename T>
-void set_cidx(T *cmax, int *cidx, T *c, int N, int numModels, dim3 blockDim) {
-	dim3 gridDim((numModels * N + blockDim.x - 1) / blockDim.x);
-	set_cidx_kernel<T><<<gridDim, blockDim>>>(cmax, cidx, c, N, numModels);
-}
-
-template void set_cidx<float>(float *cmax, int *cidx, float *c, int N, int numModels, dim3 blockDim);
-template void set_cidx<double>(double *cmax, int *cidx, double *c, int N, int numModels, dim3 blockDim);
-
 __global__
 void lasso_add_kernel(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;

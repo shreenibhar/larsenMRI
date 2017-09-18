@@ -39,7 +39,7 @@ template<typename T>
 void XAbetaOlsBatched(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels, int maxVar);
 
 template<typename T>
-void fabsMaxReduce(T *mat, T *res, T *buf, int rowSize, int colSize);
+void fabsMaxReduce(T *mat, T *res, T *buf, int *ind, int *intBuf, int rowSize, int colSize);
 
 template<typename T>
 void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize);

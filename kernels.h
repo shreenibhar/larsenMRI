@@ -18,9 +18,6 @@ void mat_sub(T *a, T *b, T *c, int size, dim3 blockDim);
 template<typename T>
 void exclude(T *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, T def, dim3 blockDim);
 
-template<typename T>
-void set_cidx(T *cmax, int *cidx, T *c, int N, int numModels, dim3 blockDim);
-
 void lasso_add(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels, dim3 blockDim);
 
 template<typename T>

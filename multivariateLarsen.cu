@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 		
 	// Declare all lars variables
 	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
-	int *pivot, *info, *ctrl;
+	int *pivot, *info, *ctrl, *intBuf;
 	int *lVars;
 	int *hNVars, *hdone, *hact, *hLasso, *hDropidx;
 	int *hctrl;
@@ -124,6 +124,7 @@ int main(int argc, char *argv[]) {
 	init_var<int>(pivot, numModels * M);
 	init_var<int>(info, numModels);
 	init_var<int>(ctrl, 1);
+	init_var<int>(intBuf, numModels * 128);
 	
 	init_var<int>(lVars, numModels * M);
 	
@@ -146,7 +147,7 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(betaOls, numModels * M);
 	init_var<precision>(d, numModels * M);
 	init_var<precision>(gamma_tilde, numModels * M);
-	init_var<precision>(buf, numModels * 64);
+	init_var<precision>(buf, numModels * 128);
 		
 	init_var<precision>(beta, numModels * N);
 	init_var<precision>(c, numModels * N);
@@ -160,7 +161,7 @@ int main(int argc, char *argv[]) {
 
 	int top = numModels;
 	double totalFlop = 0;
-	double times[25] = {0};
+	double times[24] = {0};
 
 	cublasHandle_t hnd;
 	cublasCreate(&hnd);
@@ -247,22 +248,16 @@ int main(int argc, char *argv[]) {
 		times[3] += timer.elapsed();
 		
 		timer.start();
-		fabsMaxReduce<precision>(c, cmax, buf, numModels, N);
+		fabsMaxReduce<precision>(c, cmax, buf, cidx, intBuf, numModels, N);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[4] += timer.elapsed();
 
 		timer.start();
-		set_cidx<precision>(cmax, cidx, c, N, numModels, *(new dim3(bModN)));
-		cudaDeviceSynchronize();
-		timer.stop();
-		times[5] += timer.elapsed();
-		
-		timer.start();
 		lasso_add(lasso, lVars, nVars, cidx, M, N, numModels, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[6] += timer.elapsed();
+		times[5] += timer.elapsed();
 
 		cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 		cudaMemcpy(hLasso, lasso, numModels * sizeof(int), cudaMemcpyDeviceToHost);
@@ -277,7 +272,7 @@ int main(int argc, char *argv[]) {
 		}
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[7] += timer.elapsed();
+		times[6] += timer.elapsed();
 
 		timer.start();
 		for (int i = 0; i < numModels; i++) {
@@ -286,13 +281,13 @@ int main(int argc, char *argv[]) {
 		}
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[8] += timer.elapsed();
+		times[7] += timer.elapsed();
 		
 		timer.start();
 		XAyBatched<precision>(dXA, y, r, nVars, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[9] += timer.elapsed();
+		times[8] += timer.elapsed();
 		
 		timer.start();
 		for (int i = 0; i < numModels; i++) {
@@ -301,7 +296,7 @@ int main(int argc, char *argv[]) {
 		}
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[10] += timer.elapsed();
+		times[9] += timer.elapsed();
 		
 		timer.start();
 		for (int i = 0; i < numModels; i++) {
@@ -310,87 +305,86 @@ int main(int argc, char *argv[]) {
 		}
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[11] += timer.elapsed();
+		times[10] += timer.elapsed();
 		
 		timer.start();
 		IrBatched<precision>(dI, r, betaOls, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[12] += timer.elapsed();
+		times[11] += timer.elapsed();
 		
 		timer.start();
 		XAbetaOlsBatched<precision>(dXA, betaOls, d, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[13] += timer.elapsed();
+		times[12] += timer.elapsed();
 		
 		timer.start();
 		mat_sub<precision>(d, mu, d, numModels * M, *(new dim3(bModM)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[14] += timer.elapsed();
+		times[13] += timer.elapsed();
 		
 		timer.start();
 		gammat<precision>(gamma_tilde, beta, betaOls, lVars, nVars, lasso, M, N, numModels, *(new dim3(bModM)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[15] += timer.elapsed();
+		times[14] += timer.elapsed();
 		
 		timer.start();
 		minGamma<precision>(gamma_tilde, dropidx, nVars, numModels, M, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[16] += timer.elapsed();
+		times[15] += timer.elapsed();
 		
 		timer.start();
 		cublasSetStream(hnd, NULL);
 		gemm(hnd, CUBLAS_OP_N, CUBLAS_OP_N, N, numModels, M, alp[0], X, N, d, M, bet[0], cd, N);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[17] += timer.elapsed();
+		times[16] += timer.elapsed();
 		
 		timer.start();
 		cdMinReduce<precision>(c, cd, cmax, r, buf, numModels, N);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[18] += timer.elapsed();
+		times[17] += timer.elapsed();
 		
 		timer.start();
 		set_gamma<precision>(gamma, gamma_tilde, r, dropidx, lasso, nVars, maxVariables, M, numModels, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[19] += timer.elapsed();
+		times[18] += timer.elapsed();
 		
 		timer.start();
 		update<precision>(beta, mu, d, betaOls, gamma, lVars, nVars, M, N, numModels, *(new dim3(bModM)));
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[20] += timer.elapsed();
+		times[19] += timer.elapsed();
 
 		timer.start();
 		drop(lVars, dropidx, nVars, lasso, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[21] += timer.elapsed();
+		times[20] += timer.elapsed();
 
 		timer.start();
 		sqrAddReduce<precision>(y, mu, r, buf, numModels, M);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[22] += timer.elapsed();
+		times[21] += timer.elapsed();
 		
 		timer.start();
 		fabsAddReduce<precision>(beta, cmax, buf, numModels, N);
 		cudaDeviceSynchronize();
 		timer.stop();
-		times[23] += timer.elapsed();
+		times[22] += timer.elapsed();
 
 		timer.start();
 		final<precision>(a1, a2, cmax, r, step, done, numModels, 0.43, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
-
-		times[24] += timer.elapsed();
+		times[23] += timer.elapsed();
 		
 		totalFlop += flopCounter(M, N, numModels, hNVars);
 		e++;
@@ -399,14 +393,14 @@ int main(int argc, char *argv[]) {
 	// Statistics
 	double transferTime = times[0];
 	double execTime = 0;
-	for (int i = 1; i < 25; i++) execTime += times[i];
+	for (int i = 1; i < 24; i++) execTime += times[i];
 	printf("\n");
 
 	// for (int i = 0; i < 100; i++) {
 	//     printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
 	// }
 
-	for (int i = 0; i < 25; i++) {
+	for (int i = 0; i < 24; i++) {
 		printf("Kernel %2d time = %10.4f\n", i, times[i]);
 	}
 	printf("Execution time = %f\n", execTime * 1.0e-3);
@@ -425,6 +419,7 @@ int main(int argc, char *argv[]) {
 	cudaFree(pivot);
 	cudaFree(info);
 	cudaFree(ctrl);
+	cudaFree(intBuf);
 	
 	cudaFree(lVars);
 	

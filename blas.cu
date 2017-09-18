@@ -182,37 +182,43 @@ template void XAbetaOlsBatched<double>(double **XA, double *betaOls, double *d, 
 
 template<typename T>
 __global__
-void fabsMaxReduce_kernel(T *mat, T *buf, int rowSize, int colSize) {
+void fabsMaxReduce_kernel(T *mat, T *buf, int *ind, int *intBuf, int rowSize, int colSize) {
 	T *smem = SharedMemory<T>();
 	int row = threadIdx.x + blockIdx.x * blockDim.x;
 	int tid = threadIdx.y;
 	int col = threadIdx.y + blockIdx.y * blockDim.y;
 
 	smem[tid] = (row < rowSize && col < colSize)? fabs(mat[row * colSize + col]): 0;
+	if (ind == NULL) smem[tid + blockDim.y] = (row < rowSize && col < colSize)? col: 0;
+	else smem[tid + blockDim.y] = (row < rowSize && col < colSize)? ind[row * colSize + col]: 0;
 	__syncthreads();
 
 	for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-		if (tid < s) smem[tid] = max(smem[tid], smem[tid + s]);
+		if (tid < s && smem[tid + s] > smem[tid]) {
+			smem[tid] = smem[tid + s];
+			smem[tid + blockDim.y] = smem[tid + s + blockDim.y];
+		}
 		__syncthreads();
 	}
 	if (tid == 0) {
 		buf[row * gridDim.y + blockIdx.y] = smem[0];
+		intBuf[row * gridDim.y + blockIdx.y] = smem[blockDim.y];
 	}
 }
 
 template<typename T>
-void fabsMaxReduce(T *mat, T *res, T *buf, int rowSize, int colSize) {
+void fabsMaxReduce(T *mat, T *res, T *buf, int *ind, int *intBuf, int rowSize, int colSize) {
 	dim3 blockDim(1, 512);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
-	fabsMaxReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(mat, buf, rowSize, colSize);
+	fabsMaxReduce_kernel<T><<<gridDim, blockDim, 2 * blockDim.y * sizeof(T)>>>(mat, buf, NULL, intBuf, rowSize, colSize);
 	colSize = gridDim.y;
 	blockDim = *new dim3(1, next_pow2(colSize));
 	gridDim = *new dim3(rowSize, 1);
-	fabsMaxReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, res, rowSize, colSize);
+	fabsMaxReduce_kernel<T><<<gridDim, blockDim, 2 * blockDim.y * sizeof(T)>>>(buf, res, intBuf, ind, rowSize, colSize);
 }
 
-template void fabsMaxReduce<float>(float *mat, float *res, float *buf, int rowSize, int colSize);
-template void fabsMaxReduce<double>(double *mat, double *res, double *buf, int rowSize, int colSize);
+template void fabsMaxReduce<float>(float *mat, float *res, float *buf, int *ind, int *intBuf, int rowSize, int colSize);
+template void fabsMaxReduce<double>(double *mat, double *res, double *buf, int *ind, int *intBuf, int rowSize, int colSize);
 
 template<typename T>
 __global__
