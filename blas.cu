@@ -22,6 +22,14 @@ void gemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t tra
 	cublasDgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
+void gemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, float *alpha, float *Aarray[], int lda, float *Barray[], int ldb, float *beta, float *Carray[], int ldc, int batchCount) {
+	cublasSgemmBatched(handle, transa, transb, m, n, k, (const float *)alpha, (const float **)Aarray, lda, (const float **)Barray, ldb, (const float *)beta, Carray, ldc, batchCount);
+}
+
+void gemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, double *alpha, double *Aarray[], int lda, double *Barray[], int ldb, double *beta, double *Carray[], int ldc, int batchCount) {
+	cublasDgemmBatched(handle, transa, transb, m, n, k, (const double *)alpha, (const double **)Aarray, lda, (const double **)Barray, ldb, (const double *)beta, Carray, ldc, batchCount);
+}
+
 void gemv(cublasHandle_t handle, cublasOperation_t trans, int m, int n, const float *alpha, const float *A, int lda, const float *x, int incx, const float *beta, float *y, int incy) {
 	cublasSgemv(handle, trans, m, n, alpha, A, lda, x, incx, beta, y, incy);
 }
