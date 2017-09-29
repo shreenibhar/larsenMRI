@@ -161,7 +161,7 @@ void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, in
 		gather_add_kernel<T><<<1, M, 0, stream>>>(XA, XA1, X, lVars, ni, M, N, mod);
 	}
 	else {
-		dim3 blockDim(1024);
+		dim3 blockDim(optimalBlock1D((ni - drop) * M));
 		dim3 gridDim(((ni - drop) * M + blockDim.x - 1) / blockDim.x);
 		gather_del_kernel<T><<<gridDim, blockDim, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
 		gather_cop_kernel<T><<<gridDim, blockDim, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);

@@ -5,7 +5,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-#define inf 50000
+#include "utilities.h"
 
 template<typename T>
 void set_model(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);

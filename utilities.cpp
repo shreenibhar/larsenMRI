@@ -12,6 +12,38 @@ int str_to_int(std::string str) {
 	return integer;
 }
 
+int optimalBlock1D(int problemSize) {
+	int blockSize, minR = inf;
+	for (int i = 1024; i >= 256; i -= 32) {
+		int ans = problemSize % i;
+		if (ans < minR) {
+			minR = ans;
+			blockSize = i;
+		}
+	}
+	return blockSize;
+}
+
+template<typename T>
+void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker) {
+	T *hVar = new T[size];
+	cudaMemcpy(hVar, var, size * sizeof(T), cudaMemcpyDeviceToHost);
+	for (int i = 0; i < numInd; i++) {
+		if (i % breaker == 0) printf("\n");
+		if (typeid(T).name()[0] == 'i') printf("%6d ", hVar[ind[i]]);
+		else printf("%6.3f ", hVar[ind[i]]);
+	}
+	printf("\n");
+}
+
+template void printDeviceVar<float>(float *var, int size, int *ind, int numInd, int breaker);
+template void printDeviceVar<double>(double *var, int size, int *ind, int numInd, int breaker);
+
+void range(int *&ind, int st, int ed) {
+	ind = new int[ed - st];
+	for (int i = st; i < ed; i++) ind[i - st] = i;
+}
+
 GpuTimer::GpuTimer() {
 	cudaEventCreate(&startTime);
 	cudaEventCreate(&stopTime);

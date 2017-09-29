@@ -8,35 +8,6 @@
 
 typedef float precision;
 
-template<typename T>
-void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker = 1) {
-	T *hVar = new T[size];
-	cudaMemcpy(hVar, var, size * sizeof(T), cudaMemcpyDeviceToHost);
-	for (int i = 0; i < numInd; i++) {
-		if (i % breaker == 0) printf("\n");
-		if (typeid(T).name()[0] == 'i') printf("%6d ", hVar[ind[i]]);
-		else printf("%6.3f ", hVar[ind[i]]);
-	}
-	printf("\n");
-}
-
-void range(int *&ind, int st, int ed) {
-	ind = new int[ed - st];
-	for (int i = st; i < ed; i++) ind[i - st] = i;
-}
-
-int optimalBlock1D(int problemSize) {
-	int blockSize, minR = inf;
-	for (int i = 1024; i >= 256; i -= 32) {
-		int ans = problemSize % i;
-		if (ans < minR) {
-			minR = ans;
-			blockSize = i;
-		}
-	}
-	return blockSize;
-}
-
 double flopCounter(int M, int N, int numModels, int *hNVars) {
 	double flop = 0;
 	// r = y - mu

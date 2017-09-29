@@ -41,6 +41,13 @@ IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y);
 
 int str_to_int(std::string str);
 
+int optimalBlock1D(int problemSize);
+
+template<typename T>
+void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker = 1);
+
+void range(int *&ind, int st, int ed);
+
 template<typename T>
 void init_var(T *&var, int size);
 

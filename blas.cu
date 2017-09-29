@@ -236,11 +236,9 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
 	int tid = threadIdx.y;
 	int col = threadIdx.y + blockIdx.y * blockDim.y;
 
-	if (opt && row < rowSize && col < colSize && c[row * colSize + col] == cmax[row]) {
-		smem[tid] = 0;
-	}
-	else smem[tid] = (row < rowSize && col < colSize)? c[row * colSize + col]: 50000;
+	smem[tid] = (row < rowSize && col < colSize)? c[row * colSize + col]: 50000;
 	if (row < rowSize && col < colSize && opt) {
+		if (smem[tid] == cmax[row]) smem[tid] = 0;
 		if (smem[tid] != 0) {
 			T a = (smem[tid] - cmax[row]) / (cd[row * colSize + col] - cmax[row]);
 			T b = (smem[tid] + cmax[row]) / (cd[row * colSize + col] + cmax[row]);
@@ -255,7 +253,7 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
 	__syncthreads();
 
 	for (unsigned int s = blockDim.y / 2; s > 0; s >>= 1) {
-		if (tid < s) smem[tid] = min(smem[tid], smem[tid + s]);
+		if (tid < s && smem[tid + s] < smem[tid]) smem[tid] = smem[tid + s];
 		__syncthreads();
 	}
 	if (tid == 0) {
