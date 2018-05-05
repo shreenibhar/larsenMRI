@@ -14,8 +14,8 @@ int str_to_int(std::string str) {
 
 int optimalBlock1D(int problemSize) {
 	int blockSize, minR = inf;
-	for (int i = 1024; i >= 256; i -= 32) {
-		int ans = problemSize % i;
+	for (int i = 1024; i >= 32; i -= 32) {
+		int ans = (i - problemSize % i) % i;
 		if (ans < minR) {
 			minR = ans;
 			blockSize = i;

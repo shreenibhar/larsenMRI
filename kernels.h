@@ -8,7 +8,7 @@
 #include "utilities.h"
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
+void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
 
 void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int *ctrl, int numModels);
 

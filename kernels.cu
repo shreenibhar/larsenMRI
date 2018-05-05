@@ -5,7 +5,7 @@
 
 template<typename T>
 __global__
-void set_model_kernel(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact) {
+void set_model_kernel(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind == 0) {
 		nVars[mod] = 0;
@@ -13,8 +13,6 @@ void set_model_kernel(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, in
 		step[mod] = 0;
 		done[mod] = 0;
 		act[mod] = hact;
-		alp[0] = 1;
-		bet[0] = 0;
 	}
 	if (ind < M) {
 		mu[mod * M + ind] = 0;
@@ -26,13 +24,13 @@ void set_model_kernel(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, in
 }
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, T *alp, T *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim) {
+void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim) {
 	dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-	set_model_kernel<T><<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, alp, bet, nVars, lasso, step, done, act, M, N, mod, hact);
+	set_model_kernel<T><<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, mod, hact);
 }
 
-template void set_model<float>(float *Y, float *y, float *mu, float *beta, float *alp, float *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
-template void set_model<double>(double *Y, double *y, double *mu, double *beta, double *alp, double *bet, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
+template void set_model<float>(float *Y, float *y, float *mu, float *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
+template void set_model<double>(double *Y, double *y, double *mu, double *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
 
 __global__
 void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int *ctrl, int numModels) {
