@@ -12,15 +12,6 @@ public:
 	int M, N;
 };
 
-template<typename T>
-class Debug {
-public:
-	T a1;
-	T a2;
-	int nVars;
-	Debug() {a1 = -1; a2 = -1; nVars = -1;};
-};
-
 class GpuTimer {
 private:
 	cudaEvent_t startTime, stopTime;

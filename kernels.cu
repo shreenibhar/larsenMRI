@@ -24,16 +24,16 @@ void set_model_kernel(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *s
 }
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim) {
+void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim) {
 	dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
 	set_model_kernel<T><<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, mod, hact);
 }
 
-template void set_model<float>(float *Y, float *y, float *mu, float *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
-template void set_model<double>(double *Y, double *y, double *mu, double *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
+template void set_model<float>(float *Y, float *y, float *mu, float *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
+template void set_model<double>(double *Y, double *y, double *mu, double *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
 
 __global__
-void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int *ctrl, int numModels) {
+void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
 		if (nVars[mod] < maxVariables && step[mod] < maxSteps && !done[mod]) {
@@ -41,7 +41,6 @@ void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *do
 		else {
 			if (done[mod] == 0 || done[mod] == 1) {
 				done[mod] = 2;
-				ctrl[0] = 1;
 			}
 			else if (done[mod] == 2) {
 				done[mod] = 3;
@@ -50,11 +49,11 @@ void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *do
 	}
 }
 
-void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int *ctrl, int numModels) {
+void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels) {
 	int block = (numModels < 1024)? numModels: 1024;
 	dim3 blockDim(block);
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	check_kernel<<<gridDim, blockDim>>>(nVars, step, maxVariables, maxSteps, done, ctrl, numModels);
+	check_kernel<<<gridDim, blockDim>>>(nVars, step, maxVariables, maxSteps, done, numModels);
 }
 
 template<typename T>
@@ -154,7 +153,7 @@ void gather_cop_kernel(T *XA, T *XA1, T *X, int ni, int drop, int M, int N, int 
 }
 
 template<typename T>
-void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t stream) {
+void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream) {
 	if (!lassoCond) {
 		gather_add_kernel<T><<<1, M, 0, stream>>>(XA, XA1, X, lVars, ni, M, N, mod);
 	}
@@ -166,8 +165,8 @@ void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, in
 	}
 }
 
-template void gather<float>(float *XA, float *XA1, float *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t stream);
-template void gather<double>(double *XA, double *XA1, double *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t stream);
+template void gather<float>(float *XA, float *XA1, float *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
+template void gather<double>(double *XA, double *XA1, double *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
 
 template<typename T>
 __global__
@@ -307,5 +306,23 @@ void final(T *a1, T *a2, T *cmax, T *r, int *step, int *done, int numModels, T g
 
 template void final<float>(float *a1, float *a2, float *cmax, float *r, int *step, int *done, int numModels, float g, dim3 blockDim);
 template void final<double>(double *a1, double *a2, double *cmax, double *r, int *step, int *done, int numModels, double g, dim3 blockDim);
+
+template<typename T>
+__global__
+void compress_kernel(T *beta, T *r, int *lVars, int ni, int mod, int M, int N) {
+	int ind = threadIdx.x + blockIdx.x * blockDim.x;
+	if (ind < ni) {
+		T val = beta[mod * N + lVars[mod * M + ind]];
+		r[mod * M + ind] = val;
+	}
+}
+
+template<typename T>
+void compress(T *beta, T *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream) {
+	compress_kernel<T><<<1, ni, 0, stream>>>(beta, r, lVars, ni, mod, M, N);
+}
+
+template void compress<float>(float *beta, float *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);
+template void compress<double>(double *beta, double *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);
 
 #endif

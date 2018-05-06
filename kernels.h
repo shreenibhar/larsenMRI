@@ -8,9 +8,9 @@
 #include "utilities.h"
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t stream, dim3 blockDim);
+void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
 
-void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int *ctrl, int numModels);
+void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels);
 
 template<typename T>
 void mat_sub(T *a, T *b, T *c, int size, dim3 blockDim);
@@ -21,7 +21,7 @@ void exclude(T *absC, int *lVars, int *nVars, int *act, int M, int N, int numMod
 void lasso_add(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels, dim3 blockDim);
 
 template<typename T>
-void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t stream);
+void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
 
 template<typename T>
 void gammat(T *gamma_tilde, T *beta, T *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
@@ -36,5 +36,8 @@ void drop(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels
 
 template<typename T>
 void final(T *a1, T *a2, T *cmax, T *r, int *step, int *done, int numModels, T g, dim3 blockDim);
+
+template<typename T>
+void compress(T *beta, T *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);
 
 #endif

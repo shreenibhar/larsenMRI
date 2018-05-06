@@ -40,8 +40,8 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 }
 
 int main(int argc, char *argv[]) {
-	if (argc < 4) {
-		printf("Insufficient parameters, required 3! (flatMriPath, numModels, numStreams)\n");
+	if (argc < 5) {
+		printf("Insufficient parameters, required 4! (flatMriPath, numModels, numStreams, g)\n");
 		return 0;
 	}
 
@@ -53,14 +53,17 @@ int main(int argc, char *argv[]) {
 	printf("Read FMRI Data Y of shape: (%d,%d)\n", M, N);
 
 	// Number of models to solve in ||l
-	int numModels = str_to_int(argv[2]);
+	int numModels = atoi(argv[2]);
 	int totalModels = N;
 	printf("Total number of models: %d\n", totalModels);
 	printf("Number of models in ||l: %d\n", numModels);
 
-	int numStreams = str_to_int(argv[3]);
+	int numStreams = atoi(argv[3]);
 	numStreams = pow(2, int(log(numStreams) / log(2)));
 	printf("Number of streams: %d\n", numStreams);
+
+	precision g = atof(argv[4]);
+	printf("Lambda: %f\n", g);
 
 	// Computimal optimal block sizes
 	int bN = optimalBlock1D(N);
@@ -72,10 +75,9 @@ int main(int argc, char *argv[]) {
 		
 	// Declare all lars variables
 	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
-	int *pivot, *info, *ctrl, *intBuf;
+	int *pivot, *info, *intBuf;
 	int *lVars;
-	int *hNVars, *hdone, *hact, *hLasso, *hDropidx;
-	int *hctrl;
+	int *hNVars, *hStep, *hdone, *hact, *hLasso, *hDropidx;
 	precision *cmax, *a1, *a2, *gamma;
 	precision *y, *mu, *r, *betaOls, *d, *gamma_tilde, *buf;
 	precision *beta, *c, *cd;
@@ -94,18 +96,16 @@ int main(int argc, char *argv[]) {
 	
 	init_var<int>(pivot, M * numModels * M);
 	init_var<int>(info, M * numModels);
-	init_var<int>(ctrl, 1);
 	init_var<int>(intBuf, numModels * 128);
 	
 	init_var<int>(lVars, numModels * M);
 	
 	hNVars = new int[numModels];
+	hStep = new int[numModels];
 	hdone = new int[numModels];
 	hact = new int[numModels];
 	hLasso = new int[numModels];
 	hDropidx = new int[numModels];
-	
-	hctrl = new int[1];
 	
 	init_var<precision>(cmax, numModels);
 	init_var<precision>(a1, numModels);
@@ -157,8 +157,8 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < numModels; i++) set_model<precision>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, i, i, streams[i & (numStreams - 1)], *(new dim3(bN)));
 	cudaDeviceSynchronize();
 
-	Debug<precision> debug[totalModels];
 	GpuTimer timer;
+	std::ofstream stepf("step.csv"), nvarsf("nvars.csv"), a1f("a1.csv"), a2f("a2.csv"), betaf("beta.csv");
 
 	precision **batchXA[maxVariables], **batchG[maxVariables], **batchI[maxVariables], **dBatchXA[maxVariables], **dBatchG[maxVariables], **dBatchI[maxVariables];
 	for (int i = 0; i < maxVariables; i++) {
@@ -177,28 +177,54 @@ int main(int argc, char *argv[]) {
 	while (true) {
 
 		timer.start();
-		cudaMemset(ctrl, 0, 1 * sizeof(int));
-		check(nVars, step, maxVariables, maxSteps, done, ctrl, numModels);
-		cudaMemcpy(hctrl, ctrl, 1 * sizeof(int), cudaMemcpyDeviceToHost);
-		if (hctrl[0] == 1) {
+		check(nVars, step, maxVariables, maxSteps, done, numModels);
+		int ctrl = 0;
+		cudaMemcpy(hdone, done, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+		for (int i = 0; i < numModels; i++) {
+			if (hdone[i]) {
+				ctrl = 1;
+				break;
+			}
+		}
+		if (ctrl) {
 			cudaMemcpy(ha1, a1, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 			cudaMemcpy(ha2, a2, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
-			cudaMemcpy(hdone, done, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hact, act, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] == 2) {
+					compress<precision>(beta, r, lVars, hNVars[i], i, M, N, streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
 			for (int i = 0; i < numModels; i++) {
+				if (hdone[i] == 2) {
+					completed++;
+					stepf << hact[i] << ", " << hStep[i] << "\n";
+					nvarsf << hact[i] << ", " << hNVars[i] << "\n";
+					a1f << hact[i] << ", " << ha1[i] << "\n";
+					a2f << hact[i] << ", " << ha2[i] << "\n";
+					int hlVars[hNVars[i]];
+					precision hbeta[hNVars[i]];
+					cudaMemcpy(hlVars, lVars + i * M, hNVars[i] * sizeof(int), cudaMemcpyDeviceToHost);
+					cudaMemcpy(hbeta, r + i * M, hNVars[i] * sizeof(precision), cudaMemcpyDeviceToHost);
+					for (int j = 0; j < hNVars[i]; j++) betaf << hact[i] << ", " << hlVars[j] << ", " << hbeta[j] << "\n";
+				}
+			}
+
+			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i]) {
-					if (hdone[i] == 2) completed++;
 					if (top < totalModels) {
-						set_model<precision>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, i, top++, streams[i & (numStreams - 1)], *(new dim3(bN)));
-					}
-					if (debug[hact[i]].nVars == -1) {
-						debug[hact[i]].nVars = hNVars[i];
-						debug[hact[i]].a1 = ha1[i];
-						debug[hact[i]].a2 = ha2[i];
+						set_model<precision>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, i, top++, streams[s & (numStreams - 1)], *(new dim3(bN)));
+						s++;
 					}
 				}
 			}
+			
 		}
 		printf("\rCompleted %d models", completed);
 		if (completed == totalModels) {
@@ -386,7 +412,7 @@ int main(int argc, char *argv[]) {
 		times[22] += timer.elapsed();
 
 		timer.start();
-		final<precision>(a1, a2, cmax, r, step, done, numModels, 0.43, *(new dim3(bMod)));
+		final<precision>(a1, a2, cmax, r, step, done, numModels, g, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[23] += timer.elapsed();
@@ -394,16 +420,18 @@ int main(int argc, char *argv[]) {
 		totalFlop += flopCounter(M, N, numModels, hNVars);
 		e++;
 	}
-	
+
+	stepf.close();
+	nvarsf.close();
+	a1f.close();
+	a2f.close();
+	betaf.close();
+
 	// Statistics
 	double transferTime = times[0];
 	double execTime = 0;
 	for (int i = 1; i < 24; i++) execTime += times[i];
 	printf("\n");
-
-	// for (int i = 0; i < 100; i++) {
-	//     printf("Model = %d: a1 = %f: a2 = %f: nVars = %d\n", i, debug[i].a1, debug[i].a2, debug[i].nVars);
-	// }
 
 	for (int i = 0; i < 24; i++) {
 		printf("Kernel %2d time = %10.4f\n", i, times[i]);
@@ -423,7 +451,6 @@ int main(int argc, char *argv[]) {
 	
 	cudaFree(pivot);
 	cudaFree(info);
-	cudaFree(ctrl);
 	cudaFree(intBuf);
 	
 	cudaFree(lVars);
