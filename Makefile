@@ -34,7 +34,7 @@
 ################################################################################
 
 # Location of the CUDA Toolkit
-CUDA_PATH ?= "/usr/local/cuda-9.0"
+CUDA_PATH ?= "/usr/local/cuda-9.2"
 
 ##############################
 # start deprecated interface #

@@ -6,8 +6,8 @@ y = flat_mri(2: end, model_index);
 X = zscore(X);
 y = zscore(y);
 [n p] = size(X);
-X /= norm(X(:, 2), 2);
-y /= norm(y, 2);
+% X /= norm(X(:, 2), 2);
+% y /= norm(y, 2);
 
 maxVariables = min(n,p);
 maxSteps = 8*maxVariables;
@@ -81,4 +81,28 @@ while length(A) < maxVariables && step < maxSteps
 	upper1 = a2;
 	normb = a1;
 end
+
+tmp = b(A);
+display("beta before");
+display(b(A));
+
+sg = sign(b(A));
+XA = X(:, A);
+
+Yh = y - XA * inv(XA' * XA) * XA' * y;
+Z = g * XA * inv(XA' * XA) * sg;
+
+p = 1 - Z' * Z;
+q = Yh' * Z + Z' * Yh; 													% Yh' * Z + Z' * Yh = 2 * Yh' * Z
+r = -Yh' * Yh;
+a2 = (-q + sqrt(q * q - 4 * p * r)) / (2 * p);
+
+b(A) = inv(XA' * XA) * (XA' * y - g * a2 * sg);
+
+display("beta after");
+display(b(A));
+
+verify = sum(sign(tmp) == sign(b(A)));
+display("signs match?");
+display(verify == size(A, 2));
 end
