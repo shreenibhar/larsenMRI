@@ -1,18 +1,17 @@
-function larsen(flat_mri, model_index, g)
-X = flat_mri;
+function verify = larsen(flat_mri, model_index, g)
+% line nos 
+X = single(flat_mri);
 X(:, model_index) = [];
 X = X(1: end - 1, :);
 y = flat_mri(2: end, model_index);
 X = zscore(X);
 y = zscore(y);
 [n p] = size(X);
-% X /= norm(X(:, 2), 2);
-% y /= norm(y, 2);
 
 maxVariables = min(n,p);
 maxSteps = 8*maxVariables;
-b = zeros(p, 1);
-mu = zeros(n, 1);
+b = single(zeros(p, 1));
+mu = single(zeros(n, 1));
 I = 1:p;
 A = [];
 lassoCond = 0;
@@ -71,6 +70,11 @@ while length(A) < maxVariables && step < maxSteps
 
 	a1 = norm(b, 1);
 	a2 = norm((y - mu), 2);
+	check = (X(:, A)' * X(:, A) * b(A) - X(:, A)' * y) ./ (a2 * sign(b(A))); % = -g
+	mx = max(check);
+	mn = min(check);
+	ch = (mx - mn) * 200 / abs(mx + mn);
+	printf("%d, %d, %f, %f, %f\n", step, size(A, 2), mx, mn, ch);
 	if step > 1
 			G = -((upper1 - a2) / (normb - a1));
 			if G < g
@@ -82,27 +86,45 @@ while length(A) < maxVariables && step < maxSteps
 	normb = a1;
 end
 
-tmp = b(A);
-display("beta before");
-display(b(A));
+% tmp = b;
+% display("beta before");
+% display(b(A));
 
-sg = sign(b(A));
-XA = X(:, A);
+% sg = sign(b(A));
+% XA = X(:, A);
 
-Yh = y - XA * inv(XA' * XA) * XA' * y;
-Z = g * XA * inv(XA' * XA) * sg;
+% Yh = y - XA * inv(XA' * XA) * XA' * y;
+% Z = g * XA * inv(XA' * XA) * sg;
 
-p = 1 - Z' * Z;
-q = Yh' * Z + Z' * Yh; 													% Yh' * Z + Z' * Yh = 2 * Yh' * Z
-r = -Yh' * Yh;
-a2 = (-q + sqrt(q * q - 4 * p * r)) / (2 * p);
+% p = 1 - Z' * Z;
+% q = Yh' * Z + Z' * Yh; 													% Yh' * Z + Z' * Yh = 2 * Yh' * Z
+% r = -Yh' * Yh;
 
-b(A) = inv(XA' * XA) * (XA' * y - g * a2 * sg);
+% a21 = (-q + sqrt(q * q - 4 * p * r)) / (2 * p);
+% a22 = (-q - sqrt(q * q - 4 * p * r)) / (2 * p);
+% if a21 > 0 && a22 > 0
+% display("controversy");
+% elseif a21 > 0
+% a2 = a21;
+% elseif a22 > 0
+% a2 = a22;
+% end
 
-display("beta after");
-display(b(A));
+% display(a2);
 
-verify = sum(sign(tmp) == sign(b(A)));
-display("signs match?");
-display(verify == size(A, 2));
+% b(A) = inv(XA' * XA) * (XA' * y - g * a2 * sg);
+
+% display("beta after");
+% display(b(A));
+
+% verify = sum(sign(tmp) == sign(b(A)));
+% verify = verify == size(A, 2);
+% display("signs match?");
+% display(verify);
+
+% verify = sum(sign(tmp(A)) == sign(b(A)));
+% verify = verify == size(A, 2);
+% display("signs match?");
+% display(verify);
+% 306 319
 end
