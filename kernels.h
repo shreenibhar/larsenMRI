@@ -8,9 +8,10 @@
 #include "utilities.h"
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
+void set_model(T *Y, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
 
-void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels);
+template<typename T>
+void check(int *nVars, int *step, T *a1, T *a2, T * lambda, int maxVariables, int maxSteps, T l1, T l2, T g, int *done, int numModels);
 
 template<typename T>
 void mat_sub(T *a, T *b, T *c, int size, dim3 blockDim);
@@ -24,18 +25,18 @@ template<typename T>
 void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
 
 template<typename T>
-void gammat(T *gamma_tilde, T *beta, T *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
+void gammat(T *gamma_tilde, T *beta, T *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
 
 template<typename T>
-void set_gamma(T *gamma, T *gamma_tilde, T *r, int *dropidx, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
+void set_gamma(T *gamma, T *gamma_tilde, T *r, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
 
 template<typename T>
-void update(T *beta, T *mu, T *d, T *betaOls, T *gamma, int *lVars,  int *nVars, int M, int N, int numModels, dim3 blockDim);
+void update(T *beta, T *beta_prev, T *sb, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
 
 void drop(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels);
 
 template<typename T>
-void final(T *a1, T *a2, T *cmax, T *r, int *step, int *done, int numModels, T g, dim3 blockDim);
+void final(T **dXA, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N, dim3 blockDim);
 
 template<typename T>
 void compress(T *beta, T *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);

@@ -30,8 +30,6 @@ public:
 template<typename T>
 IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y);
 
-int str_to_int(std::string str);
-
 int optimalBlock1D(int problemSize);
 
 template<typename T>

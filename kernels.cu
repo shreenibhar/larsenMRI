@@ -5,7 +5,7 @@
 
 template<typename T>
 __global__
-void set_model_kernel(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact) {
+void set_model_kernel(T *Y, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind == 0) {
 		nVars[mod] = 0;
@@ -13,6 +13,9 @@ void set_model_kernel(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *s
 		step[mod] = 0;
 		done[mod] = 0;
 		act[mod] = hact;
+		a1[mod] = 0;
+		a2[mod] = 1000;
+		lambda[mod] = 1000;
 	}
 	if (ind < M) {
 		mu[mod * M + ind] = 0;
@@ -24,37 +27,36 @@ void set_model_kernel(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *s
 }
 
 template<typename T>
-void set_model(T *Y, T *y, T *mu, T *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim) {
+void set_model(T *Y, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim) {
 	dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-	set_model_kernel<T><<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, nVars, lasso, step, done, act, M, N, mod, hact);
+	set_model_kernel<T><<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, a1, a2, lambda, nVars, lasso, step, done, act, M, N, mod, hact);
 }
 
-template void set_model<float>(float *Y, float *y, float *mu, float *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
-template void set_model<double>(double *Y, double *y, double *mu, double *beta, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
+template void set_model<float>(float *Y, float *y, float *mu, float *beta, float *a1, float *a2, float *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
+template void set_model<double>(double *Y, double *y, double *mu, double *beta, double *a1, double *a2, double *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int mod, int hact, cudaStream_t &stream, dim3 blockDim);
 
+template<typename T>
 __global__
-void check_kernel(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels) {
+void check_kernel(int *nVars, int *step, T *a1, T *a2, T * lambda, int maxVariables, int maxSteps, T l1, T l2, T g, int *done, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
-		if (nVars[mod] < maxVariables && step[mod] < maxSteps && !done[mod]) {
+		if (nVars[mod] < maxVariables && step[mod] < maxSteps && a1[mod] < l1 && a2[mod] > l2 && lambda[mod] > g && !done[mod]) {
 		}
 		else {
-			if (done[mod] == 0 || done[mod] == 1) {
-				done[mod] = 2;
-			}
-			else if (done[mod] == 2) {
-				done[mod] = 3;
-			}
+			done[mod] = 1;
 		}
 	}
 }
-
-void check(int *nVars, int *step, int maxVariables, int maxSteps, int *done, int numModels) {
+template<typename T>
+void check(int *nVars, int *step, T *a1, T *a2, T * lambda, int maxVariables, int maxSteps, T l1, T l2, T g, int *done, int numModels) {
 	int block = (numModels < 1024)? numModels: 1024;
 	dim3 blockDim(block);
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	check_kernel<<<gridDim, blockDim>>>(nVars, step, maxVariables, maxSteps, done, numModels);
+	check_kernel<T><<<gridDim, blockDim>>>(nVars, step, a1, a2, lambda, maxVariables, maxSteps, l1, l2, g, done, numModels);
 }
+
+template void check<float>(int *nVars, int *step, float *a1, float *a2, float * lambda, int maxVariables, int maxSteps, float l1, float l2, float g, int *done, int numModels);
+template void check<double>(int *nVars, int *step, double *a1, double *a2, double * lambda, int maxVariables, int maxSteps, double l1, double l2, double g, int *done, int numModels);
 
 template<typename T>
 __global__
@@ -170,42 +172,42 @@ template void gather<double>(double *XA, double *XA1, double *X, int *lVars, int
 
 template<typename T>
 __global__
-void gammat_kernel(T *gamma_tilde, T *beta, T *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels) {
-	int ind = threadIdx.x + blockIdx.x * blockDim.x;
-	int mod = ind / M;
-	ind -= mod * M;
-	if (ind < M && mod < numModels) {
+void gammat_kernel(T *gamma_tilde, T *beta, T *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	if (mod < numModels) {
+		if (lasso[mod]) lasso[mod] = 0;
 		int ni = nVars[mod];
-		if (ind < ni - 1) {
-			int si = lVars[mod * M + ind];
-			T val = beta[mod * N + si] / (beta[mod * N + si] - betaOls[mod * M + ind]);
+		T miner = inf;
+		int id = -1;
+		for (int i = 0; i < ni - 1; i++) {
+			int si = lVars[mod * M + i];
+			T val = beta[mod * N + si] / (beta[mod * N + si] - betaOls[mod * M + i]);
 			val = (val <= 0)? inf: val;
-			gamma_tilde[mod * M + ind] = val;
+			if (val < miner) {
+				miner = val;
+				id = i;
+			}
 		}
-		else if (ind == 0 && ni - 1 <= 0) {
-			gamma_tilde[mod * M + ind] = inf;
-		}
-		if (ind == 0 && lasso[mod]) {
-			lasso[mod] = 0;
-		}
+		gamma_tilde[mod] = miner;
+		dropidx[mod] = id;
 	}
 }
 
 template<typename T>
-void gammat(T *gamma_tilde, T *beta, T *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim) {
-	dim3 gridDim((numModels * M + blockDim.x - 1) / blockDim.x);
-	gammat_kernel<T><<<gridDim, blockDim>>>(gamma_tilde, beta, betaOls, lVars, nVars, lasso, M, N, numModels);
+void gammat(T *gamma_tilde, T *beta, T *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim) {
+	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
+	gammat_kernel<T><<<gridDim, blockDim>>>(gamma_tilde, beta, betaOls, dropidx, lVars, nVars, lasso, M, N, numModels);
 }
 
-template void gammat<float>(float *gamma_tilde, float *beta, float *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
-template void gammat<double>(double *gamma_tilde, double *beta, double *betaOls, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
+template void gammat<float>(float *gamma_tilde, float *beta, float *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
+template void gammat<double>(double *gamma_tilde, double *beta, double *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels, dim3 blockDim);
 
 template<typename T>
 __global__
-void set_gamma_kernel(T *gamma, T *gamma_tilde, T *r, int *dropidx, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
+void set_gamma_kernel(T *gamma, T *gamma_tilde, T *r, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
-		T gamma_t = gamma_tilde[mod * M + dropidx[mod] - 1];
+		T gamma_t = gamma_tilde[mod];
 		T gamma_val = r[mod];
 		if (nVars[mod] == maxVariables) {
 			gamma[mod] = 1;
@@ -221,17 +223,17 @@ void set_gamma_kernel(T *gamma, T *gamma_tilde, T *r, int *dropidx, int *lasso, 
 }
 
 template<typename T>
-void set_gamma(T *gamma, T *gamma_tilde, T *r, int *dropidx, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim) {
+void set_gamma(T *gamma, T *gamma_tilde, T *r, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim) {
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	set_gamma_kernel<T><<<gridDim, blockDim>>>(gamma, gamma_tilde, r, dropidx, lasso, nVars, maxVariables, M, numModels);
+	set_gamma_kernel<T><<<gridDim, blockDim>>>(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
 }
 
-template void set_gamma<float>(float *gamma, float *gamma_tilde, float *r, int *dropidx, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
-template void set_gamma<double>(double *gamma, double *gamma_tilde, double *r, int *dropidx, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
+template void set_gamma<float>(float *gamma, float *gamma_tilde, float *r, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
+template void set_gamma<double>(double *gamma, double *gamma_tilde, double *r, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
 
 template<typename T>
 __global__
-void update_kernel(T *beta, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels) {
+void update_kernel(T *beta, T *beta_prev, T *sb, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	int mod = ind / M;
 	ind -= mod * M;
@@ -242,20 +244,24 @@ void update_kernel(T *beta, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *
 			mu[mod * M + ind] += gamma_val * d[mod * M + ind];
 			if (ind < ni) {
 				int si = lVars[mod * M + ind];
+				beta_prev[mod * N + si] = beta[mod * N + si];
 				beta[mod * N + si] += gamma_val * (betaOls[mod * M + ind] - beta[mod * N + si]);
+				if (beta[mod * N + si] != 0) sb[mod * N + si] = beta[mod * N + si] / abs(beta[mod * N + si]);
+				else if (beta_prev[mod * N + si] != 0) sb[mod * N + si] = beta_prev[mod * N + si] / abs(beta_prev[mod * N + si]);
+				else sb[mod * N + si] = 0;
 			}
 		}
 	}
 }
 
 template<typename T>
-void update(T *beta, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim) {
+void update(T *beta, T *beta_prev, T *sb, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim) {
 	dim3 gridDim((numModels * M + blockDim.x - 1) / blockDim.x);
-	update_kernel<T><<<gridDim, blockDim>>>(beta, mu, d, betaOls, gamma, lVars, nVars, M, N, numModels);
+	update_kernel<T><<<gridDim, blockDim>>>(beta, beta_prev, sb, mu, d, betaOls, gamma, lVars, nVars, M, N, numModels);
 }
 
-template void update<float>(float *beta, float *mu, float *d, float *betaOls, float *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
-template void update<double>(double *beta, double *mu, double *d, double *betaOls, double *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
+template void update<float>(float *beta, float *beta_prev, float *sb, float *mu, float *d, float *betaOls, float *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
+template void update<double>(double *beta, double *beta_prev, double *sb, double *mu, double *d, double *betaOls, double *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
 
 __global__
 void drop_kernel(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels) {
@@ -263,7 +269,7 @@ void drop_kernel(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int nu
 	int ind = threadIdx.x;
 	if (mod < numModels && lasso[mod]) {
 		int ni = nVars[mod];
-		int drop = dropidx[mod] - 1;
+		int drop = dropidx[mod];
 		if (ind < ni && ind > drop) {
 			int val = lVars[mod * M + ind];
 			__syncthreads();
@@ -281,31 +287,39 @@ void drop(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels
 
 template<typename T>
 __global__
-void final_kernel(T *a1, T *a2, T *cmax, T *r, int *step, int *done, int numModels, T g) {
+void final_kernel(T **dXA, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+
 	if (mod < numModels) {
 		step[mod] += 1;
-		T a1_val = cmax[mod], a2_val = sqrt(r[mod]);
-		if (step[mod] > 1) {
-			T G = -(a2_val - a2[mod]) / (a1_val - a1[mod]);
-			if (G < g) {
-				if (!done[mod]) done[mod] = 1;
-				return;
+		int ni = nVars[mod];
+		T l1 = 0, l2 = 0, G = 0;
+		for (int i = 0; i < M; i++) {
+			if (i < ni) {
+				int si = lVars[mod * M + i];
+				l1 += abs(beta[mod * N + si]);
 			}
+			T val = y[mod * M + i] - mu[mod * M + i];
+			l2 += val * val;
+			G += dXA[mod][i] * val;
 		}
-		a1[mod] = a1_val;
-		a2[mod] = a2_val;
+		l2 = sqrt(l2);
+		G = abs(G) / l2;
+
+		a1[mod] = l1;
+		a2[mod] = l2;
+		lambda[mod] = G;
 	}
 }
 
 template<typename T>
-void final(T *a1, T *a2, T *cmax, T *r, int *step, int *done, int numModels, T g, dim3 blockDim) {
+void final(T **dXA, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N, dim3 blockDim) {
 		dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-		final_kernel<<<gridDim, blockDim>>>(a1, a2, cmax, r, step, done, numModels, g);
+		final_kernel<T><<<gridDim, blockDim>>>(dXA, y, mu, beta, a1, a2, lambda, lVars, nVars, step, numModels, M, N);
 }
 
-template void final<float>(float *a1, float *a2, float *cmax, float *r, int *step, int *done, int numModels, float g, dim3 blockDim);
-template void final<double>(double *a1, double *a2, double *cmax, double *r, int *step, int *done, int numModels, double g, dim3 blockDim);
+template void final<float>(float **dXA, float *y, float *mu, float *beta, float *a1, float *a2, float *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N, dim3 blockDim);
+template void final<double>(double **dXA, double *y, double *mu, double *beta, double *a1, double *a2, double *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N, dim3 blockDim);
 
 template<typename T>
 __global__

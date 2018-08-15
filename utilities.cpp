@@ -3,15 +3,6 @@
 
 #include "utilities.h"
 
-int str_to_int(std::string str) {
-	int i = 0, integer = 0;
-	while(str[i] != '\0') {
-		integer = integer * 10 + str[i] - '0';
-		i++;
-	}
-	return integer;
-}
-
 int optimalBlock1D(int problemSize) {
 	int blockSize, minR = inf;
 	for (int i = 1024; i >= 32; i -= 32) {
@@ -36,6 +27,7 @@ void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker) {
 	printf("\n");
 }
 
+template void printDeviceVar<int>(int *var, int size, int *ind, int numInd, int breaker);
 template void printDeviceVar<float>(float *var, int size, int *ind, int numInd, int breaker);
 template void printDeviceVar<double>(double *var, int size, int *ind, int numInd, int breaker);
 
@@ -92,21 +84,14 @@ IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y) {
 			mean += hX[i * N + j];
 		}
 		mean /= M - 1;
-		T std = 0;
+		T nrm = 0;
 		for (int i = 0; i < M - 1; i++) {
 			hX[i * N + j] -= mean;
-			std += hX[i * N + j] * hX[i * N + j];
+			nrm += hX[i * N + j] * hX[i * N + j];
 		}
-		std /= M - 2;
-		std = sqrt(std);
-		T norm = 0;
+		nrm = sqrt(nrm);
 		for (int i = 0; i < M - 1; i++) {
-			hX[i * N + j] /= std;
-			norm += hX[i * N + j] * hX[i * N + j];
-		}
-		norm = sqrt(norm);
-		for (int i = 0; i < M - 1; i++) {
-			hX[i * N + j] /= norm;
+			hX[i * N + j] /= nrm;
 		}
 	}
 
@@ -122,21 +107,14 @@ IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y) {
 			mean += hY[(i - 1) * N + j];
 		}
 		mean /= M - 1;
-		T std = 0;
+		T nrm = 0;
 		for (int i = 0; i < M - 1; i++) {
 			hY[i * N + j] -= mean;
-			std += hY[i * N + j] * hY[i * N + j];
+			nrm += hY[i * N + j] * hY[i * N + j];
 		}
-		std /= M - 2;
-		std = sqrt(std);
-		T norm = 0;
+		nrm = sqrt(nrm);
 		for (int i = 0; i < M - 1; i++) {
-			hY[i * N + j] /= std;
-			norm += hY[i * N + j] * hY[i * N + j];
-		}
-		norm = sqrt(norm);
-		for (int i = 0; i < M - 1; i++) {
-			hY[i * N + j] /= norm;
+			hY[i * N + j] /= nrm;
 		}
 	}
 

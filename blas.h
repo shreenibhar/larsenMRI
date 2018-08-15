@@ -48,13 +48,4 @@ void fabsMaxReduce(T *mat, T *res, T *buf, int *ind, int *intBuf, int rowSize, i
 template<typename T>
 void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize);
 
-template<typename T>
-void fabsAddReduce(T *mat, T *res, T *buf, int rowSize, int colSize);
-
-template<typename T>
-void sqrAddReduce(T *y, T *mu, T *res, T *buf, int rowSize, int colSize);
-
-template<typename T>
-void minGamma(T *gamma_tilde, int *dropidx, int *nVars, int numModels, int M, dim3 blockDim);
-
 #endif
