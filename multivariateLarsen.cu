@@ -14,6 +14,8 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 	flop += (double) M * (double) numModels;
 	// c = X' * r
 	flop += 2.0 * (double) M * (double) N * (double) numModels;
+	// abs(c)
+	flop += (double) N * (double) numModels;
 	for (int i = 0; i < numModels; i++) {
 		// G = X(:, A)' * X(:, A)
 		flop += 2.0 * (double) hNVars[i] * (double) M * (double) hNVars[i];
@@ -27,6 +29,8 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 		flop += 2.0 * (double) hNVars[i];
 		// b update
 		flop += 3.0 * (double) hNVars[i];
+		// norm1
+		flop += 2.0 * (double) hNVars[i];
 	}
 	// cd = X'*d
 	flop += 2.0 * (double) M * (double) N * (double) numModels;
@@ -34,8 +38,12 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 	flop += 6.0 * (double) N * (double) numModels;
 	// mu update
 	flop += 2.0 * (double) M * (double) numModels;
-	// norm1 and norm2
-	flop += ((double) N + 3.0 * (double) M) * (double) numModels;
+	// norm2
+	flop += 3.0 * (double) M * (double) numModels;
+	// norm2 sqrt, step, sb, err
+	flop += 4.0 * (double) numModels;
+	// G
+	flop += 3.0 * (double) M * (double) numModels;
 	return flop;
 }
 
@@ -189,7 +197,7 @@ int main(int argc, char *argv[]) {
 
 	int top = numModels;
 	double totalFlop = 0;
-	double times[24] = {0};
+	double times[25] = {0};
 	int e = 0;
 	int completed_count = 0;
 	std::map<int, int> completed;
@@ -438,16 +446,16 @@ int main(int argc, char *argv[]) {
 	// Statistics
 	double transferTime = times[0];
 	double execTime = 0;
-	for (int i = 1; i < 24; i++) execTime += times[i];
+	for (int i = 1; i < 25; i++) execTime += times[i];
 	printf("\n");
 
-	for (int i = 0; i < 24; i++) {
-		printf("Kernel %2d time = %10.4f\n", i, times[i]);
-	}
-	printf("Execution time = %f\n", execTime * 1.0e-3);
-	printf("Transfer time = %f\n", transferTime * 1.0e-3);
-	printf("Total Gflop count = %f\n", totalFlop * 1.0e-9);
-	printf("Execution Gflops = %f\n", (totalFlop * 1.0e-9) / (execTime * 1.0e-3));
+ 	for (int i = 0; i < 25; i++) {
+ 		printf("Kernel %2d time = %10.4f\n", i, times[i]);
+ 	}
+ 	printf("Execution time(s) = %f\n", execTime * 1.0e-3);
+ 	printf("Transfer time(s) = %f\n", transferTime * 1.0e-3);
+	printf("Total Flop count(gflop) = %f\n", totalFlop * 1.0e-9);
+	printf("Execution Flops(gflops) = %f\n", (totalFlop * 1.0e-9) / (execTime * 1.0e-3));
 
 	cudaFree(nVars);
 	cudaFree(step);
