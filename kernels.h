@@ -31,12 +31,9 @@ template<typename T>
 void set_gamma(T *gamma, T *gamma_tilde, T *r, int *lasso, int *nVars, int maxVariables, int M, int numModels, dim3 blockDim);
 
 template<typename T>
-void update(T *beta, T *beta_prev, T *sb, T *mu, T *d, T *betaOls, T *gamma, int *lVars, int *nVars, int M, int N, int numModels, dim3 blockDim);
+void update(T *beta, T *beta_prev, T *mu, T *d, T *betaOls, T *gamma, T **dXA, T *y, T *a1, T *a2, T *lambda, int *lVars, int *nVars, int *step, int M, int N, int numModels, T max_l1, dim3 blockDim);
 
 void drop(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels);
-
-template<typename T>
-void final(T **dXA, T *y, T *mu, T *beta, T *a1, T *a2, T *lambda, int *lVars, int *nVars, int *step, int numModels, int M, int N, dim3 blockDim);
 
 template<typename T>
 void compress(T *beta, T *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);

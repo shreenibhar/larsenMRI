@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 	int *hNVars, *hStep, *hdone, *hact, *hLasso, *hDropidx;
 	precision *cmax, *a1, *a2, *lambda, *gamma;
 	precision *y, *mu, *r, *betaOls, *d, *gamma_tilde, *buf;
-	precision *beta, *c, *cd, *beta_prev, *sb;
+	precision *beta, *c, *cd, *beta_prev;
 	precision alp = 1, bet = 0;
 	precision *XA[numModels], *XA1[numModels], *G[numModels], *I[numModels], **dXA, **dG, **dI;
 	precision *ha1, *ha2, *hlambda;
@@ -153,7 +153,6 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(c, numModels * N);
 	init_var<precision>(cd, numModels * N);
 	init_var<precision>(beta_prev, numModels * N);
-	init_var<precision>(sb, numModels * N);
 
 	ha1 = new precision[numModels];
 	ha2 = new precision[numModels];
@@ -217,11 +216,11 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (ctrl) {
+			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(ha1, a1, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 			cudaMemcpy(ha2, a2, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hlambda, lambda, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
-			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
-			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
@@ -388,7 +387,6 @@ int main(int argc, char *argv[]) {
 		timer.stop();
 		times[t++] += timer.elapsed();
 
-		
 		timer.start();
 		mat_sub<precision>(d, mu, d, numModels * M, *(new dim3(bModM)));
 		cudaDeviceSynchronize();
@@ -421,13 +419,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		update<precision>(beta, beta_prev, sb, mu, d, betaOls, gamma, lVars, nVars, M, N, numModels, *(new dim3(bModM)));
-		cudaDeviceSynchronize();
-		timer.stop();
-		times[t++] += timer.elapsed();
-
-		timer.start();
-		final<precision>(dXA, y, mu, beta, a1, a2, lambda, lVars, nVars, step, numModels, M, N, *(new dim3(bMod)));
+		update<precision>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1, *(new dim3(bMod)));
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -489,9 +481,7 @@ int main(int argc, char *argv[]) {
 	cudaFree(c);
 	cudaFree(cd);
 	cudaFree(beta_prev);
-	cudaFree(sb);
-	
-	cublasDestroy(hnd);
+
 	for (int i = 0; i < numModels; i++) {
 		cudaFree(XA[i]);
 		cudaFree(XA1[i]);
@@ -510,6 +500,8 @@ int main(int argc, char *argv[]) {
 	cudaFree(dXA);
 	cudaFree(dG);
 	cudaFree(dI);
+
+	cublasDestroy(hnd);
 
 	return 0;
 }
