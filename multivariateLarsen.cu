@@ -112,6 +112,9 @@ int main(int argc, char *argv[]) {
 	precision alp = 1, bet = 0;
 	precision *XA[numModels], *XA1[numModels], *G[numModels], *I[numModels], **dXA, **dG, **dI;
 	precision *ha1, *ha2, *hlambda;
+	double corr_alp = 1, corr_bet = 0;
+	double *corr_beta, *corr_sb, *corr_y, *corr_tmp, *corr_betaols, *corr_yh, *corr_z;
+	double *corr_XA[numModels], *corr_G[numModels], *corr_I[numModels], **corr_dXA, **corr_dG, **corr_dI;
 
 	// Initialize all lars variables
 	init_var<int>(nVars, numModels);
@@ -154,6 +157,14 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(cd, numModels * N);
 	init_var<precision>(beta_prev, numModels * N);
 
+	init_var<double>(corr_beta, numModels * M);
+	init_var<double>(corr_sb, numModels * M);
+	init_var<double>(corr_y, numModels * M);
+	init_var<double>(corr_tmp, numModels * M);
+	init_var<double>(corr_betaols, numModels * M);
+	init_var<double>(corr_yh, numModels * M);
+	init_var<double>(corr_z, numModels * M);
+
 	ha1 = new precision[numModels];
 	ha2 = new precision[numModels];
 	hlambda = new precision[numModels];
@@ -163,6 +174,10 @@ int main(int argc, char *argv[]) {
 		init_var<precision>(XA1[i], M * M);
 		init_var<precision>(G[i], M * M);
 		init_var<precision>(I[i], M * M);
+
+		init_var<double>(corr_XA[i], M * M);
+		init_var<double>(corr_G[i], M * M);
+		init_var<double>(corr_I[i], M * M);
 	}
 	
 	cudaMalloc(&dXA, numModels * sizeof(precision *));
@@ -171,6 +186,13 @@ int main(int argc, char *argv[]) {
 	cudaMemcpy(dG, G, numModels * sizeof(precision *), cudaMemcpyHostToDevice);
 	cudaMalloc(&dI, numModels * sizeof(precision *));
 	cudaMemcpy(dI, I, numModels * sizeof(precision *), cudaMemcpyHostToDevice);
+
+	cudaMalloc(&corr_dXA, numModels * sizeof(double *));
+	cudaMemcpy(corr_dXA, corr_XA, numModels * sizeof(double *), cudaMemcpyHostToDevice);
+	cudaMalloc(&corr_dG, numModels * sizeof(double *));
+	cudaMemcpy(corr_dG, corr_G, numModels * sizeof(double *), cudaMemcpyHostToDevice);
+	cudaMalloc(&corr_dI, numModels * sizeof(double *));
+	cudaMemcpy(corr_dI, corr_I, numModels * sizeof(double *), cudaMemcpyHostToDevice);
 
 	precision **batchXA[maxVariables], **batchG[maxVariables], **batchI[maxVariables], **dBatchXA[maxVariables], **dBatchG[maxVariables], **dBatchI[maxVariables];
 	for (int i = 0; i < maxVariables; i++) {
@@ -218,17 +240,114 @@ int main(int argc, char *argv[]) {
 		if (ctrl) {
 			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
-			cudaMemcpy(ha1, a1, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
-			cudaMemcpy(ha2, a2, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
-			cudaMemcpy(hlambda, lambda, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					compress<precision>(beta, r, lVars, hNVars[i], i, M, N, streams[s & (numStreams - 1)]);
+					copyUp<precision>(corr_XA[i], XA[i], hNVars[i] * M, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
 			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					copyUp<precision>(corr_y + i * M, y + i * M, M, streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					computeSign<precision>(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, hNVars[i], streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemm(hnd, CUBLAS_OP_T, CUBLAS_OP_N, hNVars[i], hNVars[i], M, &corr_alp, corr_XA[i], M, corr_XA[i], M, &corr_bet, corr_G[i], hNVars[i]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					getrfBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], pivot + i * M, info + i, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					getriBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], pivot + i * M, corr_dI + i, hNVars[i], info + i, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_T, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_y + i * M, 1, &corr_bet, corr_tmp + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_tmp + i * M, 1, &corr_bet, corr_betaols + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_betaols + i * M, 1, &corr_bet, corr_yh + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_sb + i * M, 1, &corr_bet, corr_tmp + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_tmp + i * M, 1, &corr_bet, corr_z + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					correct<precision>(corr_beta + i * M, corr_betaols + i * M, corr_tmp + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
+
+			cudaMemcpy(ha1, a1, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
+			cudaMemcpy(ha2, a2, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
+			cudaMemcpy(hlambda, lambda, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 
 			for (int i = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
@@ -240,9 +359,9 @@ int main(int argc, char *argv[]) {
 					a2f << hact[i] << ", " << ha2[i] << "\n";
 					lambdaf << hact[i] << ", " << hlambda[i] << "\n";
 					int hlVars[hNVars[i]];
-					precision hbeta[hNVars[i]];
+					double hbeta[hNVars[i]];
 					cudaMemcpy(hlVars, lVars + i * M, hNVars[i] * sizeof(int), cudaMemcpyDeviceToHost);
-					cudaMemcpy(hbeta, r + i * M, hNVars[i] * sizeof(precision), cudaMemcpyDeviceToHost);
+					cudaMemcpy(hbeta, corr_beta + i * M, hNVars[i] * sizeof(double), cudaMemcpyDeviceToHost);
 					for (int j = 0; j < hNVars[i]; j++) betaf << hact[i] << ", " << hlVars[j] << ", " << hbeta[j] << "\n";
 				}
 			}
@@ -482,11 +601,23 @@ int main(int argc, char *argv[]) {
 	cudaFree(cd);
 	cudaFree(beta_prev);
 
+	cudaFree(corr_beta);
+	cudaFree(corr_sb);
+	cudaFree(corr_y);
+	cudaFree(corr_tmp);
+	cudaFree(corr_betaols);
+	cudaFree(corr_yh);
+	cudaFree(corr_z);
+
 	for (int i = 0; i < numModels; i++) {
 		cudaFree(XA[i]);
 		cudaFree(XA1[i]);
 		cudaFree(G[i]);
 		cudaFree(I[i]);
+
+		cudaFree(corr_XA[i]);
+		cudaFree(corr_G[i]);
+		cudaFree(corr_I[i]);
 	}
 
 	for (int i = 0; i < maxVariables; i++) {
@@ -500,6 +631,10 @@ int main(int argc, char *argv[]) {
 	cudaFree(dXA);
 	cudaFree(dG);
 	cudaFree(dI);
+
+	cudaFree(corr_dXA);
+	cudaFree(corr_dG);
+	cudaFree(corr_dI);
 
 	cublasDestroy(hnd);
 

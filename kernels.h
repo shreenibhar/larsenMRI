@@ -36,6 +36,12 @@ void update(T *beta, T *beta_prev, T *mu, T *d, T *betaOls, T *gamma, T **dXA, T
 void drop(int *lVars, int *dropidx, int *nVars, int *lasso, int M, int numModels);
 
 template<typename T>
-void compress(T *beta, T *r, int *lVars, int ni, int mod, int M, int N, cudaStream_t &stream);
+void copyUp(double *varUp, T *var, int size, cudaStream_t &stream);
+
+template<typename T>
+void computeSign(double *sb, T *beta, T *beta_prev, int *lVars, int ni, cudaStream_t &stream);
+
+template<typename T>
+void correct(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
 
 #endif
