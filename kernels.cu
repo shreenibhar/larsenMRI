@@ -244,11 +244,12 @@ void update_kernel(T *beta, T *beta_prev, T *mu, T *d, T *betaOls, T *gamma, T *
 			one = beta[mod * N + si];
 			two = betaOls[mod * M + i] - one;
 			three = one + gamma_val * two;
-			l1one += abs(one);
-			l1two += (one * two > 0)? two: -two;
-			l1 += abs(three);
 			beta_prev[mod * N + si] = one;
 			beta[mod * N + si] = three;
+			si = (one > eps) - (one < -eps);
+			l1one += abs(one);
+			l1two += si * two;
+			l1 += abs(three);
 		}
 		if (l1 > max_l1) {
 			gamma_val = (max_l1 - l1one) / l1two;
@@ -337,12 +338,9 @@ void computeSign_kernel(double *sb, T *beta, T *beta_prev, int *lVars, int ni) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < ni) {
 		int si = lVars[ind];
-		T eps = 1e-6;
-		if (beta[si] > eps) sb[ind] = 1;
-		else if (beta[si] < -eps) sb[ind] = -1;
-		else if (beta_prev[si] > eps) sb[ind] = 1;
-		else if (beta_prev[si] < -eps) sb[ind] = -1;
-		else sb[ind] = 0;
+		int sg = (beta[si] > eps) - (beta[si] < -eps);
+		if (!sg) sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
+		sb[ind] = (T) sg;
 	}
 }
 
@@ -358,26 +356,24 @@ template void computeSign<double>(double *sb, double *beta, double *beta_prev, i
 
 template<typename T>
 __global__
-void correct_kernel(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M) {
+void correct_kernel(double *beta, double *betaols, double *sb, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M) {
 	double zz = 0, yhyh = 0;
 	for (int i = 0; i < M; i++) {
-		double yh_val = y[i] - yh[i];
-		double z_val = z[i];
-		zz += z_val * z_val;
-		yhyh += yh_val * yh_val;
+		if (i < ni) zz += sb[i] * z[i];
+		yhyh += (y[i] - yh[i]) * (y[i] - yh[i]);
 	}
 	double err = a2[0], G = lambda[0];
-	if (err < min_l2) {
+	if (err < min_l2 && min_l2 * min_l2 >= yhyh) {
 		err = min_l2;
-		G = sqrt((err * err - yhyh) / (err * err * zz));
+		G = sqrt((min_l2 * min_l2 - yhyh) / (min_l2 * min_l2 * zz));
 	}
-	if (G < g) {
+	if (G < g && 1 > g * g * zz) {
 		G = g;
-		err = sqrt(yhyh / (1 - G * G * zz));
+		err = sqrt(yhyh / (1 - g * g * zz));
 	}
 	double l1 = 0;
 	for (int i = 0; i < ni; i++) {
-		beta[i] = betaols[i] - err * G * tmp[i];
+		beta[i] = betaols[i] - err * G * z[i];
 		l1 += abs(beta[i]);
 	}
 	a1[0] = l1;
@@ -386,11 +382,11 @@ void correct_kernel(double *beta, double *betaols, double *tmp, double *y, doubl
 }
 
 template<typename T>
-void correct(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream) {
-	correct_kernel<T><<<1, 1, 0, stream>>>(beta, betaols, tmp, y, yh, z, a1, a2, lambda, min_l2, g, ni, M);
+void correct(double *beta, double *betaols, double *sb, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream) {
+	correct_kernel<T><<<1, 1, 0, stream>>>(beta, betaols, sb, y, yh, z, a1, a2, lambda, min_l2, g, ni, M);
 }
 
-template void correct<float>(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, float *a1, float *a2, float *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
-template void correct<double>(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, double *a1, double *a2, double *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
+template void correct<float>(double *beta, double *betaols, double *sb, double *y, double *yh, double *z, float *a1, float *a2, float *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
+template void correct<double>(double *beta, double *betaols, double *sb, double *y, double *yh, double *z, double *a1, double *a2, double *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
 
 #endif

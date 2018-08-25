@@ -322,7 +322,7 @@ int main(int argc, char *argv[]) {
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
 					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_sb + i * M, 1, &corr_bet, corr_tmp + i * M, 1);
+					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_sb + i * M, 1, &corr_bet, corr_z + i * M, 1);
 					s++;
 				}
 			}
@@ -330,16 +330,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-					gemv(hnd, CUBLAS_OP_N, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_tmp + i * M, 1, &corr_bet, corr_z + i * M, 1);
-					s++;
-				}
-			}
-			cudaDeviceSynchronize();
-
-			for (int i = 0, s = 0; i < numModels; i++) {
-				if (hdone[i] && !completed[hact[i]]) {
-					correct<precision>(corr_beta + i * M, corr_betaols + i * M, corr_tmp + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
+					correct<precision>(corr_beta + i * M, corr_betaols + i * M, corr_sb + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}

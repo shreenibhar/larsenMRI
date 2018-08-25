@@ -6,6 +6,7 @@
 #include <cublas_v2.h>
 
 #define inf 50000
+#define eps 1e-6
 
 class IntegerTuple {
 public:

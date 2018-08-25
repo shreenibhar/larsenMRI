@@ -42,6 +42,6 @@ template<typename T>
 void computeSign(double *sb, T *beta, T *beta_prev, int *lVars, int ni, cudaStream_t &stream);
 
 template<typename T>
-void correct(double *beta, double *betaols, double *tmp, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
+void correct(double *beta, double *betaols, double *sb, double *y, double *yh, double *z, T *a1, T *a2, T *lambda, double min_l2, double g, int ni, int M, cudaStream_t &stream);
 
 #endif
