@@ -179,6 +179,7 @@ void gather(T *XA, T *XA1, T *X, int *lVars, int ni, int lassoCond, int drop, in
 		gather_add_kernel<T><<<1, M, 0, stream>>>(XA, XA1, X, lVars, ni, M, N, mod);
 	}
 	else {
+		if (ni == drop) return;
 		dim3 blockDim(min((ni - drop) * M, 1024));
 		dim3 gridDim(((ni - drop) * M + blockDim.x - 1) / blockDim.x);
 		gather_del_kernel<T><<<gridDim, blockDim, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
@@ -198,7 +199,7 @@ void gammat_kernel(T *gamma_tilde, T *beta, T *betaOls, int *dropidx, int *lVars
 		int ni = nVars[mod];
 		T miner = inf;
 		int id = -1;
-		for (int i = 0; i < ni - 1; i++) {
+		for (int i = 0; i < ni; i++) {
 			int si = lVars[mod * M + i];
 			T val = beta[mod * N + si] / (beta[mod * N + si] - betaOls[mod * M + i]);
 			val = (val < eps)? inf: val;
@@ -363,11 +364,11 @@ void correct_kernel(double *beta, double *betaols, double *sb, double *y, double
 		yhyh += (y[i] - yh[i]) * (y[i] - yh[i]);
 	}
 	double err = a2[0], G = lambda[0];
-	if (err < min_l2 && min_l2 * min_l2 >= yhyh) {
+	if (err < min_l2) {
 		err = min_l2;
 		G = sqrt((min_l2 * min_l2 - yhyh) / (min_l2 * min_l2 * zz));
 	}
-	if (G < g && 1 > g * g * zz) {
+	if (G < g) {
 		G = g;
 		err = sqrt(yhyh / (1 - g * g * zz));
 	}
