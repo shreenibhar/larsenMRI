@@ -242,8 +242,8 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
 		if (smem[tid] != 0) {
 			T a = (smem[tid] - cmax[row]) / (cd[row * colSize + col] - cmax[row]);
 			T b = (smem[tid] + cmax[row]) / (cd[row * colSize + col] + cmax[row]);
-			a = (a <= 0)? 50000: a;
-			b = (b <= 0)? 50000: b;
+			a = (a < eps)? 50000: a;
+			b = (b < eps)? 50000: b;
 			smem[tid] = min(a, b);
 		}
 		else {

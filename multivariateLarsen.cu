@@ -93,14 +93,6 @@ int main(int argc, char *argv[]) {
 	maxSteps = min(8 * maxVariables, maxSteps);
 	printf("Max Steps: %d\n", maxSteps);
 
-	// Computimal optimal block sizes
-	int bN = optimalBlock1D(N);
-	int bM = optimalBlock1D(M);
-	int bModM = optimalBlock1D(numModels * M);
-	int bMM = optimalBlock1D(M * M);
-	int bModN = optimalBlock1D(numModels * N);
-	int bMod = optimalBlock1D(numModels);
-		
 	// Declare all lars variables
 	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
 	int *pivot, *info, *intBuf;
@@ -210,7 +202,8 @@ int main(int argc, char *argv[]) {
 	cudaStream_t streams[numStreams];
 	for (int i = 0; i < numStreams; i++) cudaStreamCreate(&streams[i]);
 
-	for (int i = 0; i < numModels; i++) set_model<precision>(Y, y, mu, beta, a1, a2, lambda, nVars, lasso, step, done, act, M, N, i, i, streams[i & (numStreams - 1)], *(new dim3(bN)));
+	for (int i = 0; i < numModels; i++)
+		set_model<precision>(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, i, streams[i & (numStreams - 1)]);
 	cudaDeviceSynchronize();
 
 	GpuTimer timer;
@@ -359,7 +352,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels && top < totalModels; i++) {
 				if (hdone[i] && completed[hact[i]]) {
-					set_model<precision>(Y, y, mu, beta, a1, a2, lambda, nVars, lasso, step, done, act, M, N, i, top++, streams[s & (numStreams - 1)], *(new dim3(bN)));
+					set_model<precision>(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, top++, streams[i & (numStreams - 1)]);
 					s++;
 					hdone[i] = 0;
 				}
@@ -380,7 +373,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		mat_sub<precision>(y, mu, r, numModels * M, *(new dim3(bModM)));
+		mat_sub<precision>(y, mu, r, numModels * M);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -393,7 +386,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		exclude<precision>(c, lVars, nVars, act, M, N, numModels, 0, *(new dim3(bModM)));
+		exclude<precision>(c, lVars, nVars, act, M, N, numModels, 0);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -405,7 +398,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		lasso_add(lasso, lVars, nVars, cidx, M, N, numModels, *(new dim3(bMod)));
+		lasso_add(lasso, lVars, nVars, cidx, M, N, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -498,13 +491,13 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		mat_sub<precision>(d, mu, d, numModels * M, *(new dim3(bModM)));
+		mat_sub<precision>(d, mu, d, numModels * M);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		gammat<precision>(gamma_tilde, beta, betaOls, dropidx, lVars, nVars, lasso, M, N, numModels, *(new dim3(bModM)));
+		gammat<precision>(gamma_tilde, beta, betaOls, dropidx, lVars, nVars, lasso, M, N, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -523,13 +516,13 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		set_gamma<precision>(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels, *(new dim3(bMod)));
+		set_gamma<precision>(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		update<precision>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1, *(new dim3(bMod)));
+		update<precision>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();

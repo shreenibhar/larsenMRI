@@ -3,18 +3,6 @@
 
 #include "utilities.h"
 
-int optimalBlock1D(int problemSize) {
-	int blockSize, minR = inf;
-	for (int i = 1024; i >= 32; i -= 32) {
-		int ans = (i - problemSize % i) % i;
-		if (ans < minR) {
-			minR = ans;
-			blockSize = i;
-		}
-	}
-	return blockSize;
-}
-
 template<typename T>
 void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker) {
 	T *hVar = new T[size];
