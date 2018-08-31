@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
 	cudaDeviceSynchronize();
 
 	GpuTimer timer;
-	std::ofstream stepf("step.csv"), nvarsf("nvars.csv"), a1f("a1.csv"), a2f("a2.csv"), lambdaf("G.csv"), betaf("beta.csv");
+	std::ofstream stepf("step.csv"), nvarsf("nvars.csv"), a1f("l1.csv"), a2f("err.csv"), lambdaf("G.csv"), betaf("beta.csv");
 
 	int top = numModels;
 	double totalFlop = 0;

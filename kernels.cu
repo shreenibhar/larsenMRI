@@ -311,11 +311,11 @@ void correct_kernel(corr_precision *beta, corr_precision *betaols, corr_precisio
 		yhyh += (y[i] - yh[i]) * (y[i] - yh[i]);
 	}
 	corr_precision err = a2[0], G = lambda[0];
-	if (err < min_l2) {
+	if (err < min_l2 && min_l2 * min_l2 >= yhyh) {
 		err = min_l2;
 		G = sqrt((min_l2 * min_l2 - yhyh) / (min_l2 * min_l2 * zz));
 	}
-	if (G < g) {
+	if (G < g && 1 > g * g * zz) {
 		G = g;
 		err = sqrt(yhyh / (1 - g * g * zz));
 	}
