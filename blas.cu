@@ -98,18 +98,17 @@ struct SharedMemory<double> {
 	}
 };
 
-template<typename T>
 __global__
-void XAyBatched_kernel(T **XA, T *y, T *r, int *nVars, int M, int numModels) {
+void XAyBatched_kernel(precision **XA, precision *y, precision *r, int *nVars, int M, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	int ind = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < numModels) {
 		int ni = nVars[mod];
-		T *smem = SharedMemory<T>();
+		precision *smem = SharedMemory<precision>();
 		smem[ind] = (ind < M)? y[mod * M + ind]: 0;
 		__syncthreads();
 		if (ind < ni) {
-			T val = 0;
+			precision val = 0;
 			for (int i = 0; i < M; i++) {
 				val += XA[mod][ind * M + i] * smem[i];
 			}
@@ -118,28 +117,23 @@ void XAyBatched_kernel(T **XA, T *y, T *r, int *nVars, int M, int numModels) {
 	}
 }
 
-template<typename T>
-void XAyBatched(T **XA, T *y, T *r, int *nVars, int M, int numModels) {
+void XAyBatched(precision **XA, precision *y, precision *r, int *nVars, int M, int numModels) {
 	dim3 blockDim(1, M);
 	dim3 gridDim(numModels, 1);
-	XAyBatched_kernel<T><<<gridDim, blockDim, M * sizeof(T)>>>(XA, y, r, nVars, M, numModels);
+	XAyBatched_kernel<<<gridDim, blockDim, M * sizeof(precision)>>>(XA, y, r, nVars, M, numModels);
 }
 
-template void XAyBatched<float>(float **XA, float *y, float *r, int *nVars, int M, int numModels);
-template void XAyBatched<double>(double **XA, double *y, double *r, int *nVars, int M, int numModels);
-
-template<typename T>
 __global__
-void IrBatched_kernel(T **I, T *r, T *betaOls, int *nVars, int M, int numModels) {
+void IrBatched_kernel(precision **I, precision *r, precision *betaOls, int *nVars, int M, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	int ind = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < numModels) {
 		int ni = nVars[mod];
-		T *smem = SharedMemory<T>();
+		precision *smem = SharedMemory<precision>();
 		smem[ind] = (ind < ni)? r[mod * M + ind]: 0;
 		__syncthreads();
 		if (ind < ni) {
-			T val = 0;
+			precision val = 0;
 			for (int i = 0; i < ni; i++) {
 				val += I[mod][ind * ni + i] * smem[i];
 			}
@@ -148,28 +142,23 @@ void IrBatched_kernel(T **I, T *r, T *betaOls, int *nVars, int M, int numModels)
 	}
 }
 
-template<typename T>
-void IrBatched(T **I, T *r, T *betaOls, int *nVars, int M, int numModels, int maxVar) {
+void IrBatched(precision **I, precision *r, precision *betaOls, int *nVars, int M, int numModels, int maxVar) {
 	dim3 blockDim(1, maxVar);
 	dim3 gridDim(numModels, 1);
-	IrBatched_kernel<T><<<gridDim, blockDim, maxVar * sizeof(T)>>>(I, r, betaOls, nVars, M, numModels);
+	IrBatched_kernel<<<gridDim, blockDim, maxVar * sizeof(precision)>>>(I, r, betaOls, nVars, M, numModels);
 }
 
-template void IrBatched<float>(float **I, float *r, float *betaOls, int *nVars, int M, int numModels, int maxVar);
-template void IrBatched<double>(double **I, double *r, double *betaOls, int *nVars, int M, int numModels, int maxVar);
-
-template<typename T>
 __global__
-void XAbetaOlsBatched_kernel(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels) {
+void XAbetaOlsBatched_kernel(precision **XA, precision *betaOls, precision *d, int *nVars, int M, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	int ind = threadIdx.y + blockIdx.y * blockDim.y;
 	if (mod < numModels) {
 		int ni = nVars[mod];
-		T *smem = SharedMemory<T>();
+		precision *smem = SharedMemory<precision>();
 		if (ind < ni) smem[ind] = betaOls[mod * M + ind];
 		__syncthreads();
 		if (ind < M) {
-			T val = 0;
+			precision val = 0;
 			for (int i = 0; i < ni; i++) {
 				val += XA[mod][i * M + ind] * smem[i];
 			}
@@ -178,20 +167,15 @@ void XAbetaOlsBatched_kernel(T **XA, T *betaOls, T *d, int *nVars, int M, int nu
 	}
 }
 
-template<typename T>
-void XAbetaOlsBatched(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels, int maxVar) {
+void XAbetaOlsBatched(precision **XA, precision *betaOls, precision *d, int *nVars, int M, int numModels, int maxVar) {
 	dim3 blockDim(1, M);
 	dim3 gridDim(numModels, 1);
-	XAbetaOlsBatched_kernel<T><<<gridDim, blockDim, maxVar * sizeof(T)>>>(XA, betaOls, d, nVars, M, numModels);
+	XAbetaOlsBatched_kernel<<<gridDim, blockDim, maxVar * sizeof(precision)>>>(XA, betaOls, d, nVars, M, numModels);
 }
 
-template void XAbetaOlsBatched<float>(float **XA, float *betaOls, float *d, int *nVars, int M, int numModels, int maxVar);
-template void XAbetaOlsBatched<double>(double **XA, double *betaOls, double *d, int *nVars, int M, int numModels, int maxVar);
-
-template<typename T>
 __global__
-void fabsMaxReduce_kernel(T *mat, T *buf, int *ind, int *intBuf, int rowSize, int colSize) {
-	T *smem = SharedMemory<T>();
+void fabsMaxReduce_kernel(precision *mat, precision *buf, int *ind, int *intBuf, int rowSize, int colSize) {
+	precision *smem = SharedMemory<precision>();
 	int row = threadIdx.x + blockIdx.x * blockDim.x;
 	int tid = threadIdx.y;
 	int col = threadIdx.y + blockIdx.y * blockDim.y;
@@ -214,40 +198,35 @@ void fabsMaxReduce_kernel(T *mat, T *buf, int *ind, int *intBuf, int rowSize, in
 	}
 }
 
-template<typename T>
-void fabsMaxReduce(T *mat, T *res, T *buf, int *ind, int *intBuf, int rowSize, int colSize) {
-	dim3 blockDim(1, 512);
+void fabsMaxReduce(precision *mat, precision *res, precision *buf, int *ind, int *intBuf, int rowSize, int colSize) {
+	dim3 blockDim(1, 1024);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
-	fabsMaxReduce_kernel<T><<<gridDim, blockDim, 2 * blockDim.y * sizeof(T)>>>(mat, buf, NULL, intBuf, rowSize, colSize);
+	fabsMaxReduce_kernel<<<gridDim, blockDim, 2 * blockDim.y * sizeof(precision)>>>(mat, buf, NULL, intBuf, rowSize, colSize);
 	colSize = gridDim.y;
 	blockDim = *new dim3(1, next_pow2(colSize));
 	gridDim = *new dim3(rowSize, 1);
-	fabsMaxReduce_kernel<T><<<gridDim, blockDim, 2 * blockDim.y * sizeof(T)>>>(buf, res, intBuf, ind, rowSize, colSize);
+	fabsMaxReduce_kernel<<<gridDim, blockDim, 2 * blockDim.y * sizeof(precision)>>>(buf, res, intBuf, ind, rowSize, colSize);
 }
 
-template void fabsMaxReduce<float>(float *mat, float *res, float *buf, int *ind, int *intBuf, int rowSize, int colSize);
-template void fabsMaxReduce<double>(double *mat, double *res, double *buf, int *ind, int *intBuf, int rowSize, int colSize);
-
-template<typename T>
 __global__
-void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, int opt) {
-	T *smem = SharedMemory<T>();
+void cdMinReduce_kernel(precision *c, precision *cd, precision *cmax, precision *buf, int rowSize, int colSize, int opt) {
+	precision *smem = SharedMemory<precision>();
 	int row = threadIdx.x + blockIdx.x * blockDim.x;
 	int tid = threadIdx.y;
 	int col = threadIdx.y + blockIdx.y * blockDim.y;
 
-	smem[tid] = (row < rowSize && col < colSize)? c[row * colSize + col]: 50000;
+	smem[tid] = (row < rowSize && col < colSize)? c[row * colSize + col]: inf;
 	if (row < rowSize && col < colSize && opt) {
 		if (smem[tid] == cmax[row]) smem[tid] = 0;
 		if (smem[tid] != 0) {
-			T a = (smem[tid] - cmax[row]) / (cd[row * colSize + col] - cmax[row]);
-			T b = (smem[tid] + cmax[row]) / (cd[row * colSize + col] + cmax[row]);
-			a = (a < eps)? 50000: a;
-			b = (b < eps)? 50000: b;
+			precision a = (smem[tid] - cmax[row]) / (cd[row * colSize + col] - cmax[row]);
+			precision b = (smem[tid] + cmax[row]) / (cd[row * colSize + col] + cmax[row]);
+			a = (a < eps)? inf: a;
+			b = (b < eps)? inf: b;
 			smem[tid] = min(a, b);
 		}
 		else {
-			smem[tid] = 50000;
+			smem[tid] = inf;
 		}
 	}
 	__syncthreads();
@@ -261,18 +240,14 @@ void cdMinReduce_kernel(T *c, T *cd, T *cmax, T *buf, int rowSize, int colSize, 
 	}
 }
 
-template<typename T>
-void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize) {
-	dim3 blockDim(1, 512);
+void cdMinReduce(precision *c, precision *cd, precision *cmax, precision *res, precision *buf, int rowSize, int colSize) {
+	dim3 blockDim(1, 1024);
 	dim3 gridDim(rowSize, (colSize + blockDim.y - 1) / blockDim.y);
-	cdMinReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(c, cd, cmax, buf, rowSize, colSize, 1);
+	cdMinReduce_kernel<<<gridDim, blockDim, blockDim.y * sizeof(precision)>>>(c, cd, cmax, buf, rowSize, colSize, 1);
 	colSize = gridDim.y;
 	blockDim = *new dim3(1, next_pow2(colSize));
 	gridDim = *new dim3(rowSize, 1);
-	cdMinReduce_kernel<T><<<gridDim, blockDim, blockDim.y * sizeof(T)>>>(buf, NULL, NULL, res, rowSize, colSize, 0);
+	cdMinReduce_kernel<<<gridDim, blockDim, blockDim.y * sizeof(precision)>>>(buf, NULL, NULL, res, rowSize, colSize, 0);
 }
-
-template void cdMinReduce<float>(float *c, float *cd, float *cmax, float *res, float *buf, int rowSize, int colSize);
-template void cdMinReduce<double>(double *c, double *cd, double *cmax, double *res, double *buf, int rowSize, int colSize);
 
 #endif

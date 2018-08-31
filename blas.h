@@ -35,19 +35,14 @@ void amin(cublasHandle_t handle, int n, const float *x, int incx, int *result);
 
 void amin(cublasHandle_t handle, int n, const double *x, int incx, int *result);
 
-template<typename T>
-void XAyBatched(T **XA, T *y, T *r, int *nVars, int M, int numModels);
+void XAyBatched(precision **XA, precision *y, precision *r, int *nVars, int M, int numModels);
 
-template<typename T>
-void IrBatched(T **I, T *r, T *betaOls, int *nVars, int M, int numModels, int maxVar);
+void IrBatched(precision **I, precision *r, precision *betaOls, int *nVars, int M, int numModels, int maxVar);
 
-template<typename T>
-void XAbetaOlsBatched(T **XA, T *betaOls, T *d, int *nVars, int M, int numModels, int maxVar);
+void XAbetaOlsBatched(precision **XA, precision *betaOls, precision *d, int *nVars, int M, int numModels, int maxVar);
 
-template<typename T>
-void fabsMaxReduce(T *mat, T *res, T *buf, int *ind, int *intBuf, int rowSize, int colSize);
+void fabsMaxReduce(precision *mat, precision *res, precision *buf, int *ind, int *intBuf, int rowSize, int colSize);
 
-template<typename T>
-void cdMinReduce(T *c, T *cd, T *cmax, T *res, T *buf, int rowSize, int colSize);
+void cdMinReduce(precision *c, precision *cd, precision *cmax, precision *res, precision *buf, int rowSize, int colSize);
 
 #endif

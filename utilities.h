@@ -5,6 +5,9 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
+typedef float precision;
+typedef double corr_precision;
+
 #define inf 50000
 #define eps 1e-6
 
@@ -28,8 +31,7 @@ public:
 	float elapsed();       
 };
 
-template<typename T>
-IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y);
+IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y);
 
 template<typename T>
 void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker = 1);

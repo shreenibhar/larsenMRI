@@ -6,8 +6,6 @@
 #include "blas.h"
 #include "kernels.h"
 
-typedef float precision;
-
 double flopCounter(int M, int N, int numModels, int *hNVars) {
 	double flop = 0;
 	// r = y - mu
@@ -55,7 +53,7 @@ int main(int argc, char *argv[]) {
 
 	// Reading flattened mri image
 	precision *X, *Y;
-	IntegerTuple tuple = read_flat_mri<precision>(argv[1], X, Y);
+	IntegerTuple tuple = read_flat_mri(argv[1], X, Y);
 	int M = tuple.M, N = tuple.N;
 	printf("Read FMRI Data X of shape: (%d,%d)\n", M, N);
 	printf("Read FMRI Data Y of shape: (%d,%d)\n", M, N);
@@ -104,9 +102,9 @@ int main(int argc, char *argv[]) {
 	precision alp = 1, bet = 0;
 	precision *XA[numModels], *XA1[numModels], *G[numModels], *I[numModels], **dXA, **dG, **dI;
 	precision *ha1, *ha2, *hlambda;
-	double corr_alp = 1, corr_bet = 0;
-	double *corr_beta, *corr_sb, *corr_y, *corr_tmp, *corr_betaols, *corr_yh, *corr_z;
-	double *corr_XA[numModels], *corr_G[numModels], *corr_I[numModels], **corr_dXA, **corr_dG, **corr_dI;
+	corr_precision corr_alp = 1, corr_bet = 0;
+	corr_precision *corr_beta, *corr_sb, *corr_y, *corr_tmp, *corr_betaols, *corr_yh, *corr_z;
+	corr_precision *corr_XA[numModels], *corr_G[numModels], *corr_I[numModels], **corr_dXA, **corr_dG, **corr_dI;
 
 	// Initialize all lars variables
 	init_var<int>(nVars, numModels);
@@ -149,13 +147,13 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(cd, numModels * N);
 	init_var<precision>(beta_prev, numModels * N);
 
-	init_var<double>(corr_beta, numModels * M);
-	init_var<double>(corr_sb, numModels * M);
-	init_var<double>(corr_y, numModels * M);
-	init_var<double>(corr_tmp, numModels * M);
-	init_var<double>(corr_betaols, numModels * M);
-	init_var<double>(corr_yh, numModels * M);
-	init_var<double>(corr_z, numModels * M);
+	init_var<corr_precision>(corr_beta, numModels * M);
+	init_var<corr_precision>(corr_sb, numModels * M);
+	init_var<corr_precision>(corr_y, numModels * M);
+	init_var<corr_precision>(corr_tmp, numModels * M);
+	init_var<corr_precision>(corr_betaols, numModels * M);
+	init_var<corr_precision>(corr_yh, numModels * M);
+	init_var<corr_precision>(corr_z, numModels * M);
 
 	ha1 = new precision[numModels];
 	ha2 = new precision[numModels];
@@ -167,9 +165,9 @@ int main(int argc, char *argv[]) {
 		init_var<precision>(G[i], M * M);
 		init_var<precision>(I[i], M * M);
 
-		init_var<double>(corr_XA[i], M * M);
-		init_var<double>(corr_G[i], M * M);
-		init_var<double>(corr_I[i], M * M);
+		init_var<corr_precision>(corr_XA[i], M * M);
+		init_var<corr_precision>(corr_G[i], M * M);
+		init_var<corr_precision>(corr_I[i], M * M);
 	}
 	
 	cudaMalloc(&dXA, numModels * sizeof(precision *));
@@ -179,12 +177,12 @@ int main(int argc, char *argv[]) {
 	cudaMalloc(&dI, numModels * sizeof(precision *));
 	cudaMemcpy(dI, I, numModels * sizeof(precision *), cudaMemcpyHostToDevice);
 
-	cudaMalloc(&corr_dXA, numModels * sizeof(double *));
-	cudaMemcpy(corr_dXA, corr_XA, numModels * sizeof(double *), cudaMemcpyHostToDevice);
-	cudaMalloc(&corr_dG, numModels * sizeof(double *));
-	cudaMemcpy(corr_dG, corr_G, numModels * sizeof(double *), cudaMemcpyHostToDevice);
-	cudaMalloc(&corr_dI, numModels * sizeof(double *));
-	cudaMemcpy(corr_dI, corr_I, numModels * sizeof(double *), cudaMemcpyHostToDevice);
+	cudaMalloc(&corr_dXA, numModels * sizeof(corr_precision *));
+	cudaMemcpy(corr_dXA, corr_XA, numModels * sizeof(corr_precision *), cudaMemcpyHostToDevice);
+	cudaMalloc(&corr_dG, numModels * sizeof(corr_precision *));
+	cudaMemcpy(corr_dG, corr_G, numModels * sizeof(corr_precision *), cudaMemcpyHostToDevice);
+	cudaMalloc(&corr_dI, numModels * sizeof(corr_precision *));
+	cudaMemcpy(corr_dI, corr_I, numModels * sizeof(corr_precision *), cudaMemcpyHostToDevice);
 
 	precision **batchXA[maxVariables], **batchG[maxVariables], **batchI[maxVariables], **dBatchXA[maxVariables], **dBatchG[maxVariables], **dBatchI[maxVariables];
 	for (int i = 0; i < maxVariables; i++) {
@@ -203,7 +201,7 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < numStreams; i++) cudaStreamCreate(&streams[i]);
 
 	for (int i = 0; i < numModels; i++)
-		set_model<precision>(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, i, streams[i & (numStreams - 1)]);
+		set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, i, streams[i & (numStreams - 1)]);
 	cudaDeviceSynchronize();
 
 	GpuTimer timer;
@@ -236,7 +234,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					copyUp<precision>(corr_XA[i], XA[i], hNVars[i] * M, streams[s & (numStreams - 1)]);
+					copyUp(corr_XA[i], XA[i], hNVars[i] * M, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
@@ -244,7 +242,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					copyUp<precision>(corr_y + i * M, y + i * M, M, streams[s & (numStreams - 1)]);
+					copyUp(corr_y + i * M, y + i * M, M, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
@@ -252,7 +250,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					computeSign<precision>(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, hNVars[i], streams[s & (numStreams - 1)]);
+					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, hNVars[i], streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
@@ -323,7 +321,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					correct<precision>(corr_beta + i * M, corr_betaols + i * M, corr_sb + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
+					correct(corr_beta + i * M, corr_betaols + i * M, corr_sb + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
@@ -343,16 +341,16 @@ int main(int argc, char *argv[]) {
 					a2f << hact[i] << ", " << ha2[i] << "\n";
 					lambdaf << hact[i] << ", " << hlambda[i] << "\n";
 					int hlVars[hNVars[i]];
-					double hbeta[hNVars[i]];
+					corr_precision hbeta[hNVars[i]];
 					cudaMemcpy(hlVars, lVars + i * M, hNVars[i] * sizeof(int), cudaMemcpyDeviceToHost);
-					cudaMemcpy(hbeta, corr_beta + i * M, hNVars[i] * sizeof(double), cudaMemcpyDeviceToHost);
+					cudaMemcpy(hbeta, corr_beta + i * M, hNVars[i] * sizeof(corr_precision), cudaMemcpyDeviceToHost);
 					for (int j = 0; j < hNVars[i]; j++) betaf << hact[i] << ", " << hlVars[j] << ", " << hbeta[j] << "\n";
 				}
 			}
 
 			for (int i = 0, s = 0; i < numModels && top < totalModels; i++) {
 				if (hdone[i] && completed[hact[i]]) {
-					set_model<precision>(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, top++, streams[i & (numStreams - 1)]);
+					set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, top++, streams[i & (numStreams - 1)]);
 					s++;
 					hdone[i] = 0;
 				}
@@ -373,7 +371,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		mat_sub<precision>(y, mu, r, numModels * M);
+		mat_sub(y, mu, r, numModels * M);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -386,13 +384,13 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		exclude<precision>(c, lVars, nVars, act, M, N, numModels, 0);
+		exclude(c, lVars, nVars, act, M, N, numModels, 0);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		fabsMaxReduce<precision>(c, cmax, buf, cidx, intBuf, numModels, N);
+		fabsMaxReduce(c, cmax, buf, cidx, intBuf, numModels, N);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -429,7 +427,7 @@ int main(int argc, char *argv[]) {
 
 		timer.start();
 		for (int i = 0, s = 0; i < numModels; i++) {
-			gather<precision>(XA[i], XA1[i], X, lVars, hNVars[i], hLasso[i], hDropidx[i], M, N, i, streams[s & (numStreams - 1)]);
+			gather(XA[i], XA1[i], X, lVars, hNVars[i], hLasso[i], hDropidx[i], M, N, i, streams[s & (numStreams - 1)]);
 			s++;
 		}
 		cudaDeviceSynchronize();
@@ -449,7 +447,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		XAyBatched<precision>(dXA, y, r, nVars, M, numModels);
+		XAyBatched(dXA, y, r, nVars, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -479,25 +477,25 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		IrBatched<precision>(dI, r, betaOls, nVars, M, numModels, maxVar);
+		IrBatched(dI, r, betaOls, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		XAbetaOlsBatched<precision>(dXA, betaOls, d, nVars, M, numModels, maxVar);
+		XAbetaOlsBatched(dXA, betaOls, d, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		mat_sub<precision>(d, mu, d, numModels * M);
+		mat_sub(d, mu, d, numModels * M);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		gammat<precision>(gamma_tilde, beta, betaOls, dropidx, lVars, nVars, lasso, M, N, numModels);
+		gammat(gamma_tilde, beta, betaOls, dropidx, lVars, nVars, lasso, M, N, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -510,19 +508,19 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		cdMinReduce<precision>(c, cd, cmax, r, buf, numModels, N);
+		cdMinReduce(c, cd, cmax, r, buf, numModels, N);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		set_gamma<precision>(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
+		set_gamma(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		update<precision>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1);
+		update(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
