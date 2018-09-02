@@ -25,8 +25,8 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 		flop += 2.0 * (double) M * (double) hNVars[i] + (double) M;
 		// gamma_tilde
 		flop += 2.0 * (double) hNVars[i];
-		// b update
-		flop += 3.0 * (double) hNVars[i];
+		// b update + l1 check
+		flop += 5.0 * (double) hNVars[i];
 		// norm1
 		flop += 2.0 * (double) hNVars[i];
 	}
@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
 	std::ofstream stepf("step.csv"), nvarsf("nvars.csv"), a1f("l1.csv"), a2f("err.csv"), lambdaf("G.csv"), betaf("beta.csv");
 
 	int top = numModels;
-	double totalFlop = 0;
+	double totalFlop = 0, corr_flop = 0;
 	double times[25] = {0};
 	int e = 0;
 	int completed_count = 0;
@@ -333,6 +333,12 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
+					corr_flop += 2.0 * (double) hNVars[i] * (double) M * (double) hNVars[i];
+					corr_flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += 2.0 * (double) M * (double) hNVars[i] + (double) M + 2.0 * (double) M * (double) M;
+					corr_flop += 2.0 * (double) hNVars[i] * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += 4.0 * (double) hNVars[i] + 11;
 					completed[hact[i]] = 1;
 					completed_count++;
 					stepf << hact[i] << ", " << hStep[i] << "\n";
@@ -542,13 +548,12 @@ int main(int argc, char *argv[]) {
 	for (int i = 1; i < 25; i++) execTime += times[i];
 	printf("\n");
 
+	std::ofstream speedf("speed.csv");
  	for (int i = 0; i < 25; i++) {
- 		printf("Kernel %2d time = %10.4f\n", i, times[i]);
+ 		speedf << i << ", " << times[i] << "\n";
  	}
- 	printf("Execution time(s) = %f\n", execTime * 1.0e-3);
- 	printf("Transfer time(s) = %f\n", transferTime * 1.0e-3);
-	printf("Total Flop count(gflop) = %f\n", totalFlop * 1.0e-9);
-	printf("Execution Flops(gflops) = %f\n", (totalFlop * 1.0e-9) / (execTime * 1.0e-3));
+ 	speedf << (corr_flop * 1.0e-9) / (transferTime * 1.0e-3) << ", " << (totalFlop * 1.0e-9) / (execTime * 1.0e-3) << "\n";
+ 	speedf.close();
 
 	cudaFree(nVars);
 	cudaFree(step);
