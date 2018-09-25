@@ -2,7 +2,7 @@
 % L1 norm(b) changed everywhere to L1 norm(b(A))
 % Implemented correction equations
 
-function [b, l1_out, err_out, g_out, step] = larsen(flat_mri, model_index, max_l1=0, min_l2=0, g=0, max_ss=0, max_steps=0)
+function [b, l1_out, err_out, g_out, step] = larsen(flat_mri, model_index, max_l1, min_l2, g, max_ss, max_steps)
 
 X = double(flat_mri);
 X(:, model_index) = [];
@@ -92,7 +92,7 @@ end
 XA = X(:, A);
 sb = sign(b(A));
 if lassoCond
-	sb(dropIdx) = sign(b_prev(A(dropIdx)))
+	sb(dropIdx) = sign(b_prev(A(dropIdx)));
 end
 
 if (l1 > max_l1)

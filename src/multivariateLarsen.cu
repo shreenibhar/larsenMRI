@@ -1,7 +1,3 @@
-#include <bits/stdc++.h>
-#include <cuda_runtime.h>
-#include <cublas_v2.h>
-
 #include "utilities.h"
 #include "blas.h"
 #include "kernels.h"
@@ -44,6 +40,32 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 	flop += 3.0 * (double) M * (double) numModels;
 	return flop;
 }
+
+using namespace thrust::placeholders;
+
+struct absolute: public thrust::unary_function<precision, precision>
+{
+	__host__ __device__
+	precision operator()(precision x) {
+		return abs(x);
+	}
+};
+
+struct cdTransform : public thrust::unary_function<thrust::tuple<precision, precision, precision>, precision>
+{
+	__host__ __device__
+	precision operator()(thrust::tuple<precision, precision, precision> x) {
+		precision c_val = thrust::get<0>(x);
+		precision cd_val = thrust::get<1>(x);
+		precision cmax_val = thrust::get<2>(x);
+		if (c_val == 0) return inf;
+		precision val1 = (c_val - cmax_val) / (cd_val - cmax_val);
+		precision val2 = (c_val + cmax_val) / (cd_val + cmax_val);
+		val1 = (val1 < eps)? inf: val1;
+		val2 = (val2 < eps)? inf: val2;
+		return min(val1, val2);
+	}
+};
 
 int main(int argc, char *argv[]) {
 	if (argc < 9) {
@@ -93,11 +115,11 @@ int main(int argc, char *argv[]) {
 
 	// Declare all lars variables
 	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
-	int *pivot, *info, *intBuf;
+	int *pivot, *info;
 	int *lVars;
 	int *hNVars, *hStep, *hdone, *hact, *hLasso, *hDropidx;
 	precision *cmax, *a1, *a2, *lambda, *gamma;
-	precision *y, *mu, *r, *betaOls, *d, *gamma_tilde, *buf;
+	precision *y, *mu, *r, *betaOls, *d, *gamma_tilde;
 	precision *beta, *c, *cd, *beta_prev;
 	precision alp = 1, bet = 0;
 	precision *XA[numModels], *XA1[numModels], *G[numModels], *I[numModels], **dXA, **dG, **dI;
@@ -117,7 +139,6 @@ int main(int argc, char *argv[]) {
 	
 	init_var<int>(pivot, M * numModels * M);
 	init_var<int>(info, M * numModels);
-	init_var<int>(intBuf, numModels * 128);
 	
 	init_var<int>(lVars, numModels * M);
 	
@@ -140,7 +161,6 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(betaOls, numModels * M);
 	init_var<precision>(d, numModels * M);
 	init_var<precision>(gamma_tilde, numModels);
-	init_var<precision>(buf, numModels * 128);
 		
 	init_var<precision>(beta, numModels * N);
 	init_var<precision>(c, numModels * N);
@@ -194,6 +214,13 @@ int main(int argc, char *argv[]) {
 		cudaMalloc(&dBatchI[i], numModels * sizeof(precision *));
 	}
 	int batchLen[maxVariables];
+
+	// Inititalize thrust variables
+	thrust::device_ptr<precision> c_ptr = thrust::device_pointer_cast(c);
+	thrust::device_ptr<precision> cd_ptr = thrust::device_pointer_cast(cd);
+	thrust::device_ptr<precision> cmax_ptr = thrust::device_pointer_cast(cmax);
+	thrust::device_ptr<precision> gamma_ptr = thrust::device_pointer_cast(gamma);
+	thrust::device_ptr<int> cidx_ptr = thrust::device_pointer_cast(cidx);
 
 	cublasHandle_t hnd;
 	cublasCreate(&hnd);
@@ -396,13 +423,26 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		fabsMaxReduce(c, cmax, buf, cidx, intBuf, numModels, N);
+		thrust::reduce_by_key(
+			thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 / N),
+			thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 / N) + numModels * N,
+			thrust::make_zip_iterator(
+				thrust::make_tuple(
+					thrust::make_transform_iterator(c_ptr, absolute()),
+					thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 % N)
+				)
+			),
+			thrust::make_discard_iterator(),
+			thrust::make_zip_iterator(thrust::make_tuple(cmax_ptr, cidx_ptr)),
+			thrust::equal_to<int>(),
+			thrust::maximum<thrust::tuple<precision, int> >()
+		);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 
 		timer.start();
-		lasso_add(lasso, lVars, nVars, cidx, M, N, numModels);
+		lasso_add(c, lasso, lVars, nVars, cidx, M, N, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -514,13 +554,33 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		cdMinReduce(c, cd, cmax, r, buf, numModels, N);
+		thrust::reduce_by_key(
+			thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 / N),
+			thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 / N) + numModels * N,
+			thrust::make_transform_iterator(
+				thrust::make_zip_iterator(
+					thrust::make_tuple(
+						c_ptr,
+						cd_ptr,
+						thrust::make_permutation_iterator(
+							cmax_ptr,
+							thrust::make_transform_iterator(thrust::make_counting_iterator((int) 0), _1 / N)
+						)
+					)
+				),
+				cdTransform()
+			),
+			thrust::make_discard_iterator(),
+			gamma_ptr,
+			thrust::equal_to<int>(),
+			thrust::minimum<precision>()
+		);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
-		
+
 		timer.start();
-		set_gamma(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
+		set_gamma(gamma, gamma_tilde, lasso, nVars, maxVariables, M, numModels);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -549,11 +609,11 @@ int main(int argc, char *argv[]) {
 	printf("\n");
 
 	std::ofstream speedf("speed.csv");
- 	for (int i = 0; i < 25; i++) {
- 		speedf << i << ", " << times[i] << "\n";
- 	}
- 	speedf << (corr_flop * 1.0e-9) / (transferTime * 1.0e-3) << ", " << (totalFlop * 1.0e-9) / (execTime * 1.0e-3) << "\n";
- 	speedf.close();
+	for (int i = 0; i < 25; i++) {
+		speedf << i << ", " << times[i] << "\n";
+	}
+	speedf << (corr_flop * 1.0e-9) / (transferTime * 1.0e-3) << ", " << (totalFlop * 1.0e-9) / (execTime * 1.0e-3) << "\n";
+	speedf.close();
 
 	cudaFree(nVars);
 	cudaFree(step);
@@ -565,7 +625,6 @@ int main(int argc, char *argv[]) {
 	
 	cudaFree(pivot);
 	cudaFree(info);
-	cudaFree(intBuf);
 	
 	cudaFree(lVars);
 	
@@ -581,7 +640,6 @@ int main(int argc, char *argv[]) {
 	cudaFree(betaOls);
 	cudaFree(d);
 	cudaFree(gamma_tilde);
-	cudaFree(buf);
 	
 	cudaFree(beta);
 	cudaFree(c);

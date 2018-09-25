@@ -102,7 +102,7 @@ void exclude(precision *absC, int *lVars, int *nVars, int *act, int M, int N, in
 }
 
 __global__
-void lasso_add_kernel(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels) {
+void lasso_add_kernel(precision *c, int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
 		if (!lasso[mod]) {
@@ -110,14 +110,15 @@ void lasso_add_kernel(int *lasso, int *lVars, int *nVars, int *cidx, int M, int 
 			int id = cidx[mod];
 			lVars[mod * M + ni] = id;
 			nVars[mod] = ni + 1;
+			c[mod * N + id] = 0;
 		}
 	}
 }
 
-void lasso_add(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels) {
+void lasso_add(precision *c, int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels) {
 	dim3 blockDim(min(numModels, 1024));
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	lasso_add_kernel<<<gridDim, blockDim>>>(lasso, lVars, nVars, cidx, M, N, numModels);
+	lasso_add_kernel<<<gridDim, blockDim>>>(c, lasso, lVars, nVars, cidx, M, N, numModels);
 }
 
 __global__
@@ -192,11 +193,11 @@ void gammat(precision *gamma_tilde, precision *beta, precision *betaOls, int *dr
 }
 
 __global__
-void set_gamma_kernel(precision *gamma, precision *gamma_tilde, precision *r, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
+void set_gamma_kernel(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
 		precision gamma_t = gamma_tilde[mod];
-		precision gamma_val = r[mod];
+		precision gamma_val = gamma[mod];
 		if (nVars[mod] == maxVariables) {
 			gamma[mod] = 1;
 		}
@@ -210,10 +211,10 @@ void set_gamma_kernel(precision *gamma, precision *gamma_tilde, precision *r, in
 	}
 }
 
-void set_gamma(precision *gamma, precision *gamma_tilde, precision *r, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
+void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars, int maxVariables, int M, int numModels) {
 	dim3 blockDim(min(numModels, 1024));
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	set_gamma_kernel<<<gridDim, blockDim>>>(gamma, gamma_tilde, r, lasso, nVars, maxVariables, M, numModels);
+	set_gamma_kernel<<<gridDim, blockDim>>>(gamma, gamma_tilde, lasso, nVars, maxVariables, M, numModels);
 }
 
 __global__

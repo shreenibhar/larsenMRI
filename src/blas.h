@@ -41,8 +41,4 @@ void IrBatched(precision **I, precision *r, precision *betaOls, int *nVars, int 
 
 void XAbetaOlsBatched(precision **XA, precision *betaOls, precision *d, int *nVars, int M, int numModels, int maxVar);
 
-void fabsMaxReduce(precision *mat, precision *res, precision *buf, int *ind, int *intBuf, int rowSize, int colSize);
-
-void cdMinReduce(precision *c, precision *cd, precision *cmax, precision *res, precision *buf, int rowSize, int colSize);
-
 #endif

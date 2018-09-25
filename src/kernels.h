@@ -17,13 +17,13 @@ void mat_sub(precision *a, precision *b, precision *c, int size);
 
 void exclude(precision *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, precision def);
 
-void lasso_add(int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels);
+void lasso_add(precision *c, int *lasso, int *lVars, int *nVars, int *cidx, int M, int N, int numModels);
 
 void gather(precision *XA, precision *XA1, precision *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
 
 void gammat(precision *gamma_tilde, precision *beta, precision *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels);
 
-void set_gamma(precision *gamma, precision *gamma_tilde, precision *r, int *lasso, int *nVars, int maxVariables, int M, int numModels);
+void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars, int maxVariables, int M, int numModels);
 
 void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int M, int N, int numModels, precision max_l1);
 
