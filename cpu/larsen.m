@@ -31,7 +31,7 @@ G = g + 1;
 
 while (length(A) < maxVariables) && (step < max_steps) && (G > g) && (err > min_l2) && (l1 < max_l1)
 
-    if lassoCond
+	if lassoCond
 		I = [I A(dropIdx)];
 		A(dropIdx) = [];
 	end
@@ -48,8 +48,13 @@ while (length(A) < maxVariables) && (step < max_steps) && (G > g) && (err > min_
 	end
 
 	Gram = X(:, A)' * X(:, A);
+	if (cond(Gram) > 1e2)
+		disp(sprintf('Index (%d %d) makes the matrix ill conditioned. Dropping', cidx, find(A == cidx)));
+		A(find(A == cidx)) = [];
+		continue
+	end
 	b_OLS = Gram \ (X(: , A)' * y);
-    
+	
 	d = X(: , A) * b_OLS - mu;
 
 	gamma_tilde = b(A) ./ (b(A) - b_OLS);
@@ -72,21 +77,21 @@ while (length(A) < maxVariables) && (step < max_steps) && (G > g) && (err > min_
 	if gamma_tilde < gamma
 		lassoCond = 1;
 		gamma = gamma_tilde;
-    end
+	end
 
-    b_prev = b;
+	b_prev = b;
 	b(A) = b(A) + gamma*(b_OLS - b(A));
-    
-    mu = mu + gamma * d;
-    step = step + 1;
-    l1 = norm(b(A), 1);
-    err = norm(y - mu, 2);
+	
+	mu = mu + gamma * d;
+	step = step + 1;
+	l1 = norm(b(A), 1);
+	err = norm(y - mu, 2);
 
-    G_array = abs(X(:,A)' * (y - mu) / err);
-    if ((max(G_array) - min(G_array)) / max(G_array) > 1e-5)
-        disp(sprintf('Warning: Active sets do not seem to have same derivatives (possible numerical unstability)\nMax_g min_g %g %g %g\n', max(G_array), min(G_array), (max(G_array)-min(G_array))/max(G_array)));
-    end
-    G = min(G_array);
+	G_array = abs(X(:,A)' * (y - mu) / err);
+	if ((max(G_array) - min(G_array)) / max(G_array) > 1e-5)
+		disp(sprintf('Warning: Active sets do not seem to have same derivatives (possible numerical unstability)\nMax_g min_g %g %g %g\n', max(G_array), min(G_array), (max(G_array)-min(G_array))/max(G_array)));
+	end
+	G = min(G_array);
 end
 
 XA = X(:, A);
@@ -96,20 +101,20 @@ if lassoCond
 end
 
 if (l1 > max_l1)
-    disp(sprintf('Applying L1 bound correction: L1 %g max_l1 %g\n', l1, max_l1));
-    l1 = norm(b_prev(A), 1);
-    delta = sum(sign(b_prev(A)) .* (b_OLS - b_prev(A)));
-    gamma = (max_l1 - l1) / delta;
-    b(A) = b_prev(A) + gamma * (b_OLS - b_prev(A));
-    l1 = max_l1;
-    mu = X(:, A) * b(A);
-    err = norm(y - mu, 2);
-    G_array = abs(X(:,A)' * (y - mu) / err);
-    G = min(G_array);
+	disp(sprintf('Applying L1 bound correction: L1 %g max_l1 %g\n', l1, max_l1));
+	l1 = norm(b_prev(A), 1);
+	delta = sum(sign(b_prev(A)) .* (b_OLS - b_prev(A)));
+	gamma = (max_l1 - l1) / delta;
+	b(A) = b_prev(A) + gamma * (b_OLS - b_prev(A));
+	l1 = max_l1;
+	mu = X(:, A) * b(A);
+	err = norm(y - mu, 2);
+	G_array = abs(X(:,A)' * (y - mu) / err);
+	G = min(G_array);
 end
 if (err < min_l2)
-    disp(sprintf('Applying error bound correction: quadratic equation here. Err %g min_l2 %g\n', err, min_l2));
-    yhyh = y' * (y - XA * inv(XA' * XA) * XA' * y);
+	disp(sprintf('Applying error bound correction: quadratic equation here. Err %g min_l2 %g\n', err, min_l2));
+	yhyh = y' * (y - XA * inv(XA' * XA) * XA' * y);
 	zz = sb' * inv(XA' * XA) * sb;
 	G = sqrt((min_l2 * min_l2 - yhyh) / (min_l2 * min_l2 * zz));
 	err = min_l2;
@@ -117,9 +122,9 @@ if (err < min_l2)
 	l1 = norm(b(A), 1);
 end
 if (G < g)
-    disp(sprintf('Applying G  correction:G %g g %g\n', G, g));
-    yhyh = y' * (y - XA * inv(XA' * XA) * XA' * y);
-    zz = sb' * inv(XA' * XA) * sb;
+	disp(sprintf('Applying G  correction:G %g g %g\n', G, g));
+	yhyh = y' * (y - XA * inv(XA' * XA) * XA' * y);
+	zz = sb' * inv(XA' * XA) * sb;
 	err = sqrt(yhyh / (1 - g * g * zz));
 	G = g;
 	b(A) = inv(XA' * XA) * (XA' * y - G * err * sb);

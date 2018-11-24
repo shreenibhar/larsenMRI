@@ -4,6 +4,7 @@
 #include <bits/stdc++.h>
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <curand.h>
 
 #include <thrust/device_vector.h>
 #include <thrust/iterator/counting_iterator.h>

@@ -54,22 +54,6 @@ void getriBatched(cublasHandle_t handle, int n, double *Aarray[], int lda, int *
 	cublasDgetriBatched(handle, n, (const double **)Aarray, lda, PivotArray, Carray, ldc, infoArray, batchSize);
 }
 
-void amax(cublasHandle_t handle, int n, const float *x, int incx, int *result) {
-	cublasIsamax(handle, n, x, incx, result);
-}
-
-void amax(cublasHandle_t handle, int n, const double *x, int incx, int *result) {
-	cublasIdamax(handle, n, x, incx, result);
-}
-
-void amin(cublasHandle_t handle, int n, const float *x, int incx, int *result) {
-	cublasIsamin(handle, n, x, incx, result);
-}
-
-void amin(cublasHandle_t handle, int n, const double *x, int incx, int *result) {
-	cublasIdamin(handle, n, x, incx, result);
-}
-
 //------------------------------------
 
 template<class T>

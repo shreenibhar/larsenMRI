@@ -34,7 +34,7 @@
 ################################################################################
 
 # Location of the CUDA Toolkit
-CUDA_PATH ?= "/usr/local/cuda-9.2"
+CUDA_PATH ?= "/usr/local/cuda-10.0"
 
 ##############################
 # start deprecated interface #
@@ -229,6 +229,7 @@ endif
 endif
 
 LIBRARIES += -lcublas
+LIBRARIES += -lcurand
 
 ifeq ($(SAMPLE_ENABLED),0)
 EXEC ?= @echo "[@]"

@@ -13,8 +13,8 @@ double flopCounter(int M, int N, int numModels, int *hNVars) {
 	for (int i = 0; i < numModels; i++) {
 		// G = X(:, A)' * X(:, A)
 		flop += 2.0 * (double) hNVars[i] * (double) M * (double) hNVars[i];
-		// b_OLS = G\(X(:,A)'*y)
-		flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+		// b_OLS = G\(X(:,A)'*y) + rand
+		flop += 2.0 * (double) M * (double) hNVars[i] + 10.0 * (double) hNVars[i] * (double) hNVars[i];
 		// Inverse ops for G
 		flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
 		// d = X(: , A) * b_OLS - mu
@@ -67,6 +67,14 @@ struct cdTransform : public thrust::unary_function<thrust::tuple<precision, prec
 	}
 };
 
+void randInit(curandGenerator_t &gen, float *&dev, int size) {
+	curandGenerateUniform(gen, dev, size);
+}
+
+void randInit(curandGenerator_t &gen, double *&dev, int size) {
+	curandGenerateUniformDouble(gen, dev, size);
+}
+
 int main(int argc, char *argv[]) {
 	if (argc < 9) {
 		printf("Insufficient parameters, required 8! (flatMriPath, numModels, numStreams, max l1, min l2, min g, max vars, max steps)\nInput 0 for a parameter to use it's default value!\n");
@@ -114,13 +122,14 @@ int main(int argc, char *argv[]) {
 	printf("Max Steps: %d\n", maxSteps);
 
 	// Declare all lars variables
-	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
-	int *info;
+	int *nVars, *eVars, *step, *lasso, *done, *cidx, *act, *dropidx;
+	int *info, *infomapper;
 	int *lVars;
 	int *hNVars, *hStep, *hdone, *hact, *hLasso, *hDropidx;
 	precision *cmax, *a1, *a2, *lambda, *gamma;
 	precision *y, *mu, *r, *betaOls, *d, *gamma_tilde;
 	precision *beta, *c, *cd, *beta_prev;
+	precision *rander1, *rander2, *randnrm;
 	precision alp = 1, bet = 0;
 	precision *XA[numModels], *XA1[numModels], *G[numModels], *I[numModels], **dXA, **dG, **dI;
 	precision *ha1, *ha2, *hlambda;
@@ -130,6 +139,7 @@ int main(int argc, char *argv[]) {
 
 	// Initialize all lars variables
 	init_var<int>(nVars, numModels);
+	init_var<int>(eVars, numModels);
 	init_var<int>(step, numModels);
 	init_var<int>(lasso, numModels);
 	init_var<int>(done, numModels);
@@ -137,6 +147,7 @@ int main(int argc, char *argv[]) {
 	init_var<int>(act, numModels);
 	init_var<int>(dropidx, numModels);
 	
+	init_var<int>(infomapper, numModels);
 	init_var<int>(info, M * numModels);
 	
 	init_var<int>(lVars, numModels * M);
@@ -165,6 +176,16 @@ int main(int argc, char *argv[]) {
 	init_var<precision>(c, numModels * N);
 	init_var<precision>(cd, numModels * N);
 	init_var<precision>(beta_prev, numModels * N);
+
+	init_var<precision>(rander1, numModels * M);
+	init_var<precision>(rander2, numModels * M);
+	init_var<precision>(randnrm, numModels);
+	curandGenerator_t gen;
+	curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_DEFAULT);
+	curandSetPseudoRandomGeneratorSeed(gen, 6ULL);
+	randInit(gen, rander1, numModels * M);
+	curandSetPseudoRandomGeneratorSeed(gen, 66ULL);
+	randInit(gen, rander2, numModels * M);
 
 	init_var<corr_precision>(corr_beta, numModels * M);
 	init_var<corr_precision>(corr_sb, numModels * M);
@@ -227,7 +248,7 @@ int main(int argc, char *argv[]) {
 	for (int i = 0; i < numStreams; i++) cudaStreamCreate(&streams[i]);
 
 	for (int i = 0; i < numModels; i++)
-		set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, i, streams[i & (numStreams - 1)]);
+		set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, randnrm + i, nVars + i, eVars + i, lasso + i, step + i, done + i, act + i, M, N, i, streams[i & (numStreams - 1)]);
 	cudaDeviceSynchronize();
 
 	GpuTimer timer;
@@ -382,7 +403,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels && top < totalModels; i++) {
 				if (hdone[i] && completed[hact[i]]) {
-					set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, nVars + i, lasso + i, step + i, done + i, act + i, M, N, top++, streams[i & (numStreams - 1)]);
+					set_model(Y, y + i * M, mu + i * M, beta + i * N, a1 + i, a2 + i, lambda + i, randnrm + i, nVars + i, eVars + i, lasso + i, step + i, done + i, act + i, M, N, top++, streams[i & (numStreams - 1)]);
 					s++;
 					hdone[i] = 0;
 				}
@@ -416,7 +437,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		exclude(c, lVars, nVars, act, M, N, numModels, 0);
+		exclude(c, lVars, nVars, eVars, act, M, N, numModels, 0);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -451,14 +472,17 @@ int main(int argc, char *argv[]) {
 		cudaMemcpy(hLasso, lasso, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 		cudaMemcpy(hDropidx, dropidx, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 		int maxVar = hNVars[0];
+		int hinfomapper[numModels];
 		for (int i = 0; i < maxVariables; i++) batchLen[i] = 0;
 		for (int i = 0; i < numModels; i++) {
 			if (hNVars[i] > maxVar) maxVar = hNVars[i];
 			batchXA[hNVars[i]][batchLen[hNVars[i]]] = XA[i];
 			batchG[hNVars[i]][batchLen[hNVars[i]]] = G[i];
 			batchI[hNVars[i]][batchLen[hNVars[i]]] = I[i];
+			hinfomapper[i] = hNVars[i] * numModels + batchLen[hNVars[i]];
 			batchLen[hNVars[i]]++;
 		}
+		cudaMemcpy(infomapper, hinfomapper, numModels * sizeof(int), cudaMemcpyHostToDevice);
 		for (int i = 0; i < maxVariables; i++) {
 			if (batchLen[i] > 0) {
 				cudaMemcpy(dBatchXA[i], batchXA[i], batchLen[i] * sizeof(precision *), cudaMemcpyHostToDevice);
@@ -526,7 +550,25 @@ int main(int argc, char *argv[]) {
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
-		
+
+		timer.start();
+		IrBatched(dI, rander1, r, nVars, M, numModels, maxVar);
+		cudaDeviceSynchronize();
+		timer.stop();
+		times[t++] += timer.elapsed();
+
+		timer.start();
+		IrBatched(dI, rander2, d, nVars, M, numModels, maxVar);
+		cudaDeviceSynchronize();
+		timer.stop();
+		times[t++] += timer.elapsed();
+
+		timer.start();
+		checkNan(nVars, eVars, lVars, info, infomapper, r, d, randnrm, M, numModels);
+		cudaDeviceSynchronize();
+		timer.stop();
+		times[t++] += timer.elapsed();
+
 		timer.start();
 		XAbetaOlsBatched(dXA, betaOls, d, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
@@ -585,7 +627,7 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		update(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, l1);
+		update(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, infomapper, M, N, numModels, l1);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
@@ -615,6 +657,7 @@ int main(int argc, char *argv[]) {
 	speedf.close();
 
 	cudaFree(nVars);
+	cudaFree(eVars);
 	cudaFree(step);
 	cudaFree(lasso);
 	cudaFree(done);
@@ -622,6 +665,7 @@ int main(int argc, char *argv[]) {
 	cudaFree(act);
 	cudaFree(dropidx);
 	
+	cudaFree(infomapper);
 	cudaFree(info);
 	
 	cudaFree(lVars);
@@ -643,6 +687,10 @@ int main(int argc, char *argv[]) {
 	cudaFree(c);
 	cudaFree(cd);
 	cudaFree(beta_prev);
+
+	cudaFree(rander1);
+	cudaFree(rander2);
+	cudaFree(randnrm);
 
 	cudaFree(corr_beta);
 	cudaFree(corr_sb);

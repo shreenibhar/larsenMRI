@@ -4,10 +4,11 @@
 #include "kernels.h"
 
 __global__
-void set_model_kernel(precision *Y, precision *y, precision *mu, precision *beta, precision *a1, precision *a2, precision *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int hact) {
+void set_model_kernel(precision *Y, precision *y, precision *mu, precision *beta, precision *a1, precision *a2, precision *lambda, precision *randnrm, int *nVars, int *eVars, int *lasso, int *step, int *done, int *act, int M, int N, int hact) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind == 0) {
 		nVars[0] = 0;
+		eVars[0] = 0;
 		lasso[0] = 0;
 		step[0] = 0;
 		done[0] = 0;
@@ -15,6 +16,7 @@ void set_model_kernel(precision *Y, precision *y, precision *mu, precision *beta
 		a1[0] = 0;
 		a2[0] = 1e6;
 		lambda[0] = 1e6;
+		randnrm[0] = 1;
 	}
 	if (ind < M) {
 		mu[ind] = 0;
@@ -25,10 +27,10 @@ void set_model_kernel(precision *Y, precision *y, precision *mu, precision *beta
 	}
 }
 
-void set_model(precision *Y, precision *y, precision *mu, precision *beta, precision *a1, precision *a2, precision *lambda, int *nVars, int *lasso, int *step, int *done, int *act, int M, int N, int hact, cudaStream_t &stream) {
+void set_model(precision *Y, precision *y, precision *mu, precision *beta, precision *a1, precision *a2, precision *lambda, precision *randnrm, int *nVars, int *eVars, int *lasso, int *step, int *done, int *act, int M, int N, int hact, cudaStream_t &stream) {
 	dim3 blockDim(1024);
 	dim3 gridDim((N + blockDim.x - 1) / blockDim.x);
-	set_model_kernel<<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, a1, a2, lambda, nVars, lasso, step, done, act, M, N, hact);
+	set_model_kernel<<<gridDim, blockDim, 0, stream>>>(Y, y, mu, beta, a1, a2, lambda, randnrm, nVars, eVars, lasso, step, done, act, M, N, hact);
 }
 
 __global__
@@ -83,7 +85,7 @@ void mat_sub(precision *a, precision *b, precision *c, int size) {
 }
 
 __global__
-void exclude_kernel(precision *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, precision def) {
+void exclude_kernel(precision *absC, int *lVars, int *nVars, int *eVars, int *act, int M, int N, int numModels, precision def) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
 		int ni = nVars[mod];
@@ -92,13 +94,18 @@ void exclude_kernel(precision *absC, int *lVars, int *nVars, int *act, int M, in
 			int li = lVars[mod * M + i];
 			absC[mod * N + li] = def;
 		}
+		int ei = eVars[mod];
+		for (int i = 0; i < ei; i++) {
+			int li = lVars[mod * M + M - 1 - i];
+			absC[mod * N + li] = def;
+		}
 	}
 }
 
-void exclude(precision *absC, int *lVars, int *nVars, int *act, int M, int N, int numModels, precision def) {
+void exclude(precision *absC, int *lVars, int *nVars, int *eVars, int *act, int M, int N, int numModels, precision def) {
 	dim3 blockDim(min(numModels, 1024));
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	exclude_kernel<<<gridDim, blockDim>>>(absC, lVars, nVars, act, M, N, numModels, def);
+	exclude_kernel<<<gridDim, blockDim>>>(absC, lVars, nVars, eVars, act, M, N, numModels, def);
 }
 
 __global__
@@ -165,6 +172,39 @@ void gather(precision *XA, precision *XA1, precision *X, int *lVars, int ni, int
 }
 
 __global__
+void checkNan_kernel(int *nVars, int *eVars, int *lVars, int *info, int *infomapper, precision *r, precision *d, precision *randnrm, int M, int numModels) {
+	int mod = threadIdx.x + blockIdx.x * blockDim.x;
+	if (mod < numModels) {
+		int ni = nVars[mod];
+		precision nrm1 = 0, nrm2 = 0;
+		for (int i = 0; i < ni; i++) {
+			precision val1 = r[mod * M + i];
+			precision val2 = d[mod * M + i];
+			nrm1 += val1 * val1;
+			nrm2 += val2 * val2;
+		}
+		nrm1 = sqrt(nrm1);
+		nrm2 = sqrt(nrm2);
+		precision ratio = (nrm1 + nrm2) / randnrm[mod];
+		int infer = info[infomapper[mod]];
+		if (ratio > 100 || isnan(ratio) || isinf(ratio) || infer) {
+			nVars[mod] -= 1;
+			lVars[mod * M + M - 1 - eVars[mod]] = lVars[mod * M + nVars[mod]];
+			eVars[mod] += 1;
+			infer = 1;
+		}
+		else randnrm[mod] = nrm1 + nrm2;
+		infomapper[mod] = infer;
+	}
+}
+
+void checkNan(int *nVars, int *eVars, int *lVars, int *info, int *infomapper, precision *r, precision *d, precision *randnrm, int M, int numModels) {
+	dim3 blockDim(min(numModels, 1024));
+	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
+	checkNan_kernel<<<gridDim, blockDim>>>(nVars, eVars, lVars, info, infomapper, r, d, randnrm, M, numModels);
+}
+
+__global__
 void gammat_kernel(precision *gamma_tilde, precision *beta, precision *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
 	if (mod < numModels) {
@@ -218,9 +258,9 @@ void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars,
 }
 
 __global__
-void update_kernel(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int M, int N, int numModels, precision max_l1) {
+void update_kernel(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int *info, int M, int N, int numModels, precision max_l1) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
-	if (mod < numModels) {
+	if (mod < numModels && !info[mod]) {
 		int ni = nVars[mod];
 		precision gamma_val = gamma[mod];
 		precision l1 = 0, l1one = 0, l1two = 0, one, two, three;
@@ -267,10 +307,10 @@ void update_kernel(precision *beta, precision *beta_prev, precision *mu, precisi
 	}
 }
 
-void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int M, int N, int numModels, precision max_l1) {
+void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int *info, int M, int N, int numModels, precision max_l1) {
 	dim3 blockDim(min(numModels, 1024));
 	dim3 gridDim((numModels + blockDim.x - 1) / blockDim.x);
-	update_kernel<<<gridDim, blockDim>>>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, M, N, numModels, max_l1);
+	update_kernel<<<gridDim, blockDim>>>(beta, beta_prev, mu, d, betaOls, gamma, dXA, y, a1, a2, lambda, lVars, nVars, step, info, M, N, numModels, max_l1);
 }
 
 __global__

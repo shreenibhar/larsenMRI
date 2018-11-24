@@ -27,14 +27,6 @@ void getriBatched(cublasHandle_t handle, int n, float *Aarray[], int lda, int *P
 
 void getriBatched(cublasHandle_t handle, int n, double *Aarray[], int lda, int *PivotArray, double *Carray[], int ldc, int *infoArray, int batchSize);
 
-void amax(cublasHandle_t handle, int n, const float *x, int incx, int *result);
-
-void amax(cublasHandle_t handle, int n, const double *x, int incx, int *result);
-
-void amin(cublasHandle_t handle, int n, const float *x, int incx, int *result);
-
-void amin(cublasHandle_t handle, int n, const double *x, int incx, int *result);
-
 void XAyBatched(precision **XA, precision *y, precision *r, int *nVars, int M, int numModels);
 
 void IrBatched(precision **I, precision *r, precision *betaOls, int *nVars, int M, int numModels, int maxVar);
