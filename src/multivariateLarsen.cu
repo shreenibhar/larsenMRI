@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
 
 	// Declare all lars variables
 	int *nVars, *step, *lasso, *done, *cidx, *act, *dropidx;
-	int *pivot, *info;
+	int *info;
 	int *lVars;
 	int *hNVars, *hStep, *hdone, *hact, *hLasso, *hDropidx;
 	precision *cmax, *a1, *a2, *lambda, *gamma;
@@ -137,7 +137,6 @@ int main(int argc, char *argv[]) {
 	init_var<int>(act, numModels);
 	init_var<int>(dropidx, numModels);
 	
-	init_var<int>(pivot, M * numModels * M);
 	init_var<int>(info, M * numModels);
 	
 	init_var<int>(lVars, numModels * M);
@@ -295,7 +294,7 @@ int main(int argc, char *argv[]) {
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
 					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-					getrfBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], pivot + i * M, info + i, 1);
+					getrfBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, info + i, 1);
 					s++;
 				}
 			}
@@ -304,7 +303,7 @@ int main(int argc, char *argv[]) {
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
 					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-					getriBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], pivot + i * M, corr_dI + i, hNVars[i], info + i, 1);
+					getriBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, corr_dI + i, hNVars[i], info + i, 1);
 					s++;
 				}
 			}
@@ -502,7 +501,7 @@ int main(int argc, char *argv[]) {
 		for (int i = 0, s = 0; i < maxVariables; i++) {
 			if (batchLen[i] > 0) {
 				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-				getrfBatched(hnd, i, dBatchG[i], i, pivot + i * numModels * M, info + i * numModels, batchLen[i]);
+				getrfBatched(hnd, i, dBatchG[i], i, NULL, info + i * numModels, batchLen[i]);
 				s++;
 			}
 		}
@@ -514,7 +513,7 @@ int main(int argc, char *argv[]) {
 		for (int i = 0, s = 0; i < maxVariables; i++) {
 			if (batchLen[i] > 0) {
 				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-				getriBatched(hnd, i, dBatchG[i], i, pivot + i * numModels * M, dBatchI[i], i, info + i * numModels, batchLen[i]);
+				getriBatched(hnd, i, dBatchG[i], i, NULL, dBatchI[i], i, info + i * numModels, batchLen[i]);
 				s++;
 			}
 		}
@@ -623,7 +622,6 @@ int main(int argc, char *argv[]) {
 	cudaFree(act);
 	cudaFree(dropidx);
 	
-	cudaFree(pivot);
 	cudaFree(info);
 	
 	cudaFree(lVars);
