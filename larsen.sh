@@ -1,4 +1,4 @@
-#1/bin/bash
+#!/bin/bash
 
 threshnii=$1
 numModels=$2
@@ -14,8 +14,6 @@ then
 	echo "Input 0 to use defaults"
 	exit
 fi
-bash compile.sh
-bash niiprocess.sh $threshnii
 files=`ls datatxt`
 for file in ${files[*]}
 do
