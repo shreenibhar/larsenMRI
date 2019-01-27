@@ -29,7 +29,7 @@ void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars,
 
 void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int *info, int M, int N, int numModels, precision max_l1);
 
-void copyUp(corr_precision *varUp, precision *var, int size, cudaStream_t &stream);
+void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act, cudaStream_t &stream);
 
 void computeSign(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int ni, cudaStream_t &stream);
 

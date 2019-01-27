@@ -83,7 +83,9 @@ int main(int argc, char *argv[]) {
 
 	// Reading flattened mri image
 	precision *X, *Y;
-	IntegerTuple tuple = read_flat_mri(argv[1], X, Y);
+	IntegerTuple tuple = read_flat_mri<precision>(argv[1], X, Y);
+	corr_precision *cX, *cY;
+	read_flat_mri<corr_precision>(argv[1], cX, cY);
 	int M = tuple.M, N = tuple.N;
 	printf("Read FMRI Data X of shape: (%d,%d)\n", M, N);
 	printf("Read FMRI Data Y of shape: (%d,%d)\n", M, N);
@@ -278,18 +280,11 @@ int main(int argc, char *argv[]) {
 		if (ctrl) {
 			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+			cudaMemcpy(hact, act, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					copyUp(corr_XA[i], XA[i], hNVars[i] * M, streams[s & (numStreams - 1)]);
-					s++;
-				}
-			}
-			cudaDeviceSynchronize();
-
-			for (int i = 0, s = 0; i < numModels; i++) {
-				if (hdone[i] && !completed[hact[i]]) {
-					copyUp(corr_y + i * M, y + i * M, M, streams[s & (numStreams - 1)]);
+					gatherAll(corr_XA[i], corr_y + i * M, cX, lVars + i * M, hNVars[i], M, N, hact[i], streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
@@ -655,6 +650,11 @@ int main(int argc, char *argv[]) {
 	}
 	speedf << (corr_flop * 1.0e-9) / (transferTime * 1.0e-3) << ", " << (totalFlop * 1.0e-9) / (execTime * 1.0e-3) << "\n";
 	speedf.close();
+
+	cudaFree(X);
+	cudaFree(Y);
+	cudaFree(cX);
+	cudaFree(cY);
 
 	cudaFree(nVars);
 	cudaFree(eVars);

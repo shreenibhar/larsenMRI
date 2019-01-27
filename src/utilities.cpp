@@ -48,12 +48,13 @@ float GpuTimer::elapsed() {
 	return mill;
 }
 
-IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y) {
+template<typename T>
+IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y) {
 	std::ifstream fp(path.c_str());
 	int M, N;
 	fp >> M >> N;
 	
-	precision *h_number = new precision[M * N];
+	T *h_number = new T[M * N];
 	for (int i = 0; i < M; i++) {
 		for (int j = 0; j < N; j++) {
 			fp >> h_number[i * N + j];
@@ -61,17 +62,17 @@ IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y) {
 	}
 	fp.close();
 
-	cudaMalloc(&X, (M - 1) * N * sizeof(precision));
-	precision *hX = new precision[(M - 1) * N];
+	cudaMalloc(&X, (M - 1) * N * sizeof(T));
+	T *hX = new T[(M - 1) * N];
 
 	for (int j = 0; j < N; j++) {
-		precision mean = 0;
+		T mean = 0;
 		for (int i = 0; i < M - 1; i++) {
 			hX[i * N + j] = h_number[i * N + j];
 			mean += hX[i * N + j];
 		}
 		mean /= M - 1;
-		precision nrm = 0;
+		T nrm = 0;
 		for (int i = 0; i < M - 1; i++) {
 			hX[i * N + j] -= mean;
 			nrm += hX[i * N + j] * hX[i * N + j];
@@ -82,19 +83,19 @@ IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y) {
 		}
 	}
 
-	cudaMemcpy(X, hX, (M - 1) * N * sizeof(precision), cudaMemcpyHostToDevice);
+	cudaMemcpy(X, hX, (M - 1) * N * sizeof(T), cudaMemcpyHostToDevice);
 
-	cudaMalloc(&Y, (M - 1) * N * sizeof(precision));
-	precision *hY = new precision[(M - 1) * N];
+	cudaMalloc(&Y, (M - 1) * N * sizeof(T));
+	T *hY = new T[(M - 1) * N];
 	
 	for (int j = 0; j < N; j++) {
-		precision mean = 0;
+		T mean = 0;
 		for (int i = 1; i < M; i++) {
 			hY[(i - 1) * N + j] = h_number[i * N + j];
 			mean += hY[(i - 1) * N + j];
 		}
 		mean /= M - 1;
-		precision nrm = 0;
+		T nrm = 0;
 		for (int i = 0; i < M - 1; i++) {
 			hY[i * N + j] -= mean;
 			nrm += hY[i * N + j] * hY[i * N + j];
@@ -105,13 +106,16 @@ IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y) {
 		}
 	}
 
-	cudaMemcpy(Y, hY, (M - 1) * N * sizeof(precision), cudaMemcpyHostToDevice);
+	cudaMemcpy(Y, hY, (M - 1) * N * sizeof(T), cudaMemcpyHostToDevice);
 
 	IntegerTuple tuple;
 	tuple.M = M - 1;
 	tuple.N = N;
 	return tuple;
 }
+
+template IntegerTuple read_flat_mri<float>(std::string path, float *&X, float *&Y);
+template IntegerTuple read_flat_mri<double>(std::string path, double *&X, double *&Y);
 
 template<typename T>
 void init_var(T *&var, int size) {

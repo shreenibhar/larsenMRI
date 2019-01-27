@@ -15,7 +15,7 @@
 #include <thrust/functional.h>
 
 typedef float precision;
-typedef double corr_precision;
+typedef float corr_precision;
 
 #define inf 50000
 #define eps 1e-6
@@ -40,7 +40,8 @@ public:
 	float elapsed();       
 };
 
-IntegerTuple read_flat_mri(std::string path, precision *&X, precision *&Y);
+template<typename T>
+IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y);
 
 template<typename T>
 void printDeviceVar(T *var, int size, int *ind, int numInd, int breaker = 1);

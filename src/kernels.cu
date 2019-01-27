@@ -314,17 +314,22 @@ void update(precision *beta, precision *beta_prev, precision *mu, precision *d, 
 }
 
 __global__
-void copyUp_kernel(corr_precision *varUp, precision *var, int size) {
+void gatherAll_kernel(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
-	if (ind < size) {
-		varUp[ind] = (double) var[ind];
+	int nind = ind / M;
+	ind -= nind * M;
+	if (nind < ni && ind < M) {
+		if (nind == 0) {
+			y[ind] = X[ind * N + act];
+		}
+		XA[nind * M + ind] = X[ind * N + lVars[nind]];
 	}
 }
 
-void copyUp(corr_precision *varUp, precision *var, int size, cudaStream_t &stream) {
-	dim3 blockDim(min(size, 1024));
-	dim3 gridDim((size + blockDim.x - 1) / blockDim.x);
-	copyUp_kernel<<<gridDim, blockDim, 0, stream>>>(varUp, var, size);
+void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act, cudaStream_t &stream) {
+	dim3 blockDim(1024);
+	dim3 gridDim((ni * M + blockDim.x - 1) / blockDim.x);
+	gatherAll_kernel<<<gridDim, blockDim, 0, stream>>>(XA, y, X, lVars, ni, M, N, act);
 }
 
 __global__
