@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, hNVars[i], streams[s & (numStreams - 1)]);
+					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, dropidx + i, lasso + i, hNVars[i], streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}

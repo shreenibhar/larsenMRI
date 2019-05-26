@@ -333,20 +333,25 @@ void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lV
 }
 
 __global__
-void computeSign_kernel(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int ni) {
+void computeSign_kernel(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int *dropidx, int *lasso, int ni) {
 	int ind = threadIdx.x + blockIdx.x * blockDim.x;
 	if (ind < ni) {
 		int si = lVars[ind];
-		int sg = (beta[si] > eps) - (beta[si] < -eps);
-		if (!sg) sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
+		int sg;
+		if (lasso[0] && dropidx[0] == ind) {
+			sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
+		}
+		else {
+			sg = (beta[si] > eps) - (beta[si] < -eps);
+		}
 		sb[ind] = (corr_precision) sg;
 	}
 }
 
-void computeSign(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int ni, cudaStream_t &stream) {
+void computeSign(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int *dropidx, int *lasso, int ni, cudaStream_t &stream) {
 	dim3 blockDim(min(ni, 1024));
 	dim3 gridDim((ni + blockDim.x - 1) / blockDim.x);
-	computeSign_kernel<<<gridDim, blockDim, 0, stream>>>(sb, beta, beta_prev, lVars, ni);
+	computeSign_kernel<<<gridDim, blockDim, 0, stream>>>(sb, beta, beta_prev, lVars, dropidx, lasso, ni);
 }
 
 __global__
