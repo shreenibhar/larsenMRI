@@ -343,6 +343,9 @@ void computeSign_kernel(corr_precision *sb, precision *beta, precision *beta_pre
 		}
 		else {
 			sg = (beta[si] > eps) - (beta[si] < -eps);
+			if (sg == 0) {
+				sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
+			}
 		}
 		sb[ind] = (corr_precision) sg;
 	}
