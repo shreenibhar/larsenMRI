@@ -49,7 +49,7 @@ def write_set(precision, recall, accuracy, l1, l2, fname):
     max_.extend(list(np.max(l1, axis=0)))
     max_.extend(list(np.max(l2, axis=0)))
 
-    f = open(fname + "-" + str(precision.shape[0]), "w")
+    f = open(str(precision.shape[0]) + "-" + fname, "w")
     f.write("PSPMean, PMPMean, RSPMean, RMPMean, ASPMean, AMPMean, " +
             "1SPMean, 1MPMean, 2SPMean, 2MPMean, " +
             "PSPStd, PMPStd, RSPStd, RMPStd, ASPStd, AMPStd, " +
