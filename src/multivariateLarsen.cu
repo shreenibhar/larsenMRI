@@ -511,12 +511,6 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 		
 		timer.start();
-		XAyBatched(dXA, y, r, nVars, M, numModels);
-		cudaDeviceSynchronize();
-		timer.stop();
-		times[t++] += timer.elapsed();
-		
-		timer.start();
 		for (int i = 0, s = 0; i < maxVariables; i++) {
 			if (batchLen[i] > 0) {
 				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
@@ -572,9 +566,6 @@ int main(int argc, char *argv[]) {
 		}
 		cudaDeviceSynchronize();
 		
-		XAyBatched(dXA, y, r, nVars, M, numModels);
-		cudaDeviceSynchronize();
-		
 		for (int i = 0, s = 0; i < numModels; i++) {
 			if (hinfomapper[i] != 0) {
 				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
@@ -596,6 +587,12 @@ int main(int argc, char *argv[]) {
 		times[t++] += timer.elapsed();
 
 		// ----------------------------------------------------------------------------------
+
+		timer.start();
+		XAyBatched(dXA, y, r, nVars, M, numModels);
+		cudaDeviceSynchronize();
+		timer.stop();
+		times[t++] += timer.elapsed();
 
 		timer.start();
 		IrBatched(dI, r, betaOls, nVars, M, numModels, maxVar);

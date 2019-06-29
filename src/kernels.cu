@@ -260,7 +260,7 @@ void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars,
 __global__
 void update_kernel(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int *info, int M, int N, int numModels, precision max_l1) {
 	int mod = threadIdx.x + blockIdx.x * blockDim.x;
-	if (mod < numModels && !info[mod]) {
+	if (mod < numModels) {
 		int ni = nVars[mod];
 		precision gamma_val = gamma[mod];
 		precision l1 = 0, l1one = 0, l1two = 0, one, two, three;
