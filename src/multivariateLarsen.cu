@@ -540,26 +540,65 @@ int main(int argc, char *argv[]) {
 		timer.stop();
 		times[t++] += timer.elapsed();
 		
-		timer.start();
-		IrBatched(dI, r, betaOls, nVars, M, numModels, maxVar);
-		cudaDeviceSynchronize();
-		timer.stop();
-		times[t++] += timer.elapsed();
+		// ----------------------------------------------------------------------------------
 
 		timer.start();
 		IrBatched(dI, rander1, r, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
-		timer.stop();
-		times[t++] += timer.elapsed();
 
-		timer.start();
 		IrBatched(dI, rander2, d, nVars, M, numModels, maxVar);
+		cudaDeviceSynchronize();
+
+		checkNan(nVars, eVars, lVars, info, infomapper, r, d, randnrm, M, numModels);
+		cudaDeviceSynchronize();
+
+		cudaMemcpy(hinfomapper, infomapper, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+		cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+
+		for (int i = 0, s = 0; i < numModels; i++) {
+			if (hinfomapper[i] != 0) {
+				gather(XA[i], XA1[i], X, lVars, hNVars[i], hLasso[i], hDropidx[i], M, N, i, streams[s & (numStreams - 1)]);
+				s++;
+			}
+		}
+		cudaDeviceSynchronize();
+
+		for (int i = 0, s = 0; i < numModels; i++) {
+			if (hinfomapper[i] != 0) {
+				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+				gemm(hnd, CUBLAS_OP_T, CUBLAS_OP_N, hNVars[i], hNVars[i], M, &alp, XA[i], M, XA[i], M, &bet, G[i], hNVars[i]);
+				s++;
+			}
+		}
+		cudaDeviceSynchronize();
+		
+		XAyBatched(dXA, y, r, nVars, M, numModels);
+		cudaDeviceSynchronize();
+		
+		for (int i = 0, s = 0; i < numModels; i++) {
+			if (hinfomapper[i] != 0) {
+				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+				getrfBatched(hnd, hNVars[i], dG + i, hNVars[i], NULL, info + i, 1);
+				s++;
+			}
+		}
+		cudaDeviceSynchronize();
+		
+		for (int i = 0, s = 0; i < numModels; i++) {
+			if (hinfomapper[i] != 0) {
+				cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+				getriBatched(hnd, hNVars[i], dG + i, hNVars[i], NULL, dI + i, hNVars[i], info + i, 1);
+				s++;
+			}
+		}
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
 
+		// ----------------------------------------------------------------------------------
+
 		timer.start();
-		checkNan(nVars, eVars, lVars, info, infomapper, r, d, randnrm, M, numModels);
+		IrBatched(dI, r, betaOls, nVars, M, numModels, maxVar);
 		cudaDeviceSynchronize();
 		timer.stop();
 		times[t++] += timer.elapsed();
