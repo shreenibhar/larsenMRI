@@ -32,6 +32,7 @@ The *Kernel.h files are files containing the cuda kernels.
 * Ensure niftiread is installed with matlab and matlab command runs from the terminal.
 * Create datanii, results and datatxt directories.
 * Place all the nii or nii.gz files inside datanii. The datanii folder can have sub folders.
+* Run: bash clean.sh; bash compile.sh
 * Run: bash niiprocess.sh 6000 (6000 is mri read threshold)
 * Each nii file will have generated txt files containing the flat matrix within the datatxt folder. The txt file will contain the shape of the matrix in the first line followed by the entire matrix data.
 * Run: bash larsen.sh 512 8 0 0 0.25 0 0 (look inside the script for argument meaning)
