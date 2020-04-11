@@ -269,92 +269,92 @@ int main(int argc, char *argv[]) {
 			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hact, act, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		gatherAll(corr_XA[i], corr_y + i * M, cX, lVars + i * M, hNVars[i], M, N, hact[i], streams[s & (numStreams - 1)]);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					gatherAll(corr_XA[i], corr_y + i * M, cX, lVars + i * M, hNVars[i], M, N, hact[i], streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, dropidx + i, lasso + i, hNVars[i], streams[s & (numStreams - 1)]);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, dropidx + i, lasso + i, hNVars[i], streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		gemm(hnd, CUBLAS_OP_T, CUBLAS_OP_N, hNVars[i], hNVars[i], M, &corr_alp, corr_XA[i], M, corr_XA[i], M, &corr_bet, corr_G[i], hNVars[i]);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemm(hnd, CUBLAS_OP_T, CUBLAS_OP_N, hNVars[i], hNVars[i], M, &corr_alp, corr_XA[i], M, corr_XA[i], M, &corr_bet, corr_G[i], hNVars[i]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		getrfBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, info + i, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					getrfBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, info + i, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		getriBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, corr_dI + i, hNVars[i], info + i, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					getriBatched(hnd, hNVars[i], corr_dG + i, hNVars[i], NULL, corr_dI + i, hNVars[i], info + i, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		gemv(hnd, CUBLAS_OP_T, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_y + i * M, 1, &corr_bet, corr_tmp + i * M, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_T, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_y + i * M, 1, &corr_bet, corr_tmp + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_tmp + i * M, 1, &corr_bet, corr_betaols + i * M, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_tmp + i * M, 1, &corr_bet, corr_betaols + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		gemv(hnd, CUBLAS_OP_N, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_betaols + i * M, 1, &corr_bet, corr_yh + i * M, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, M, hNVars[i], &corr_alp, corr_XA[i], M, corr_betaols + i * M, 1, &corr_bet, corr_yh + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		cublasSetStream(hnd, streams[s & (numStreams - 1)]);
-			// 		gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_sb + i * M, 1, &corr_bet, corr_z + i * M, 1);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					cublasSetStream(hnd, streams[s & (numStreams - 1)]);
+					gemv(hnd, CUBLAS_OP_N, hNVars[i], hNVars[i], &corr_alp, corr_I[i], hNVars[i], corr_sb + i * M, 1, &corr_bet, corr_z + i * M, 1);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
-			// for (int i = 0, s = 0; i < numModels; i++) {
-			// 	if (hdone[i] && !completed[hact[i]]) {
-			// 		correct(corr_beta + i * M, corr_betaols + i * M, corr_sb + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
-			// 		s++;
-			// 	}
-			// }
-			// cudaDeviceSynchronize();
+			for (int i = 0, s = 0; i < numModels; i++) {
+				if (hdone[i] && !completed[hact[i]]) {
+					correct(corr_beta + i * M, corr_betaols + i * M, corr_sb + i * M, corr_y + i * M, corr_yh + i * M, corr_z + i * M, a1 + i, a2 + i, lambda + i, l2, g, hNVars[i], M, streams[s & (numStreams - 1)]);
+					s++;
+				}
+			}
+			cudaDeviceSynchronize();
 
 			cudaMemcpy(ha1, a1, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
 			cudaMemcpy(ha2, a2, numModels * sizeof(precision), cudaMemcpyDeviceToHost);
@@ -362,12 +362,12 @@ int main(int argc, char *argv[]) {
 
 			for (int i = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					// corr_flop += 2.0 * (double) hNVars[i] * (double) M * (double) hNVars[i];
-					// corr_flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
-					// corr_flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
-					// corr_flop += 2.0 * (double) M * (double) hNVars[i] + (double) M + 2.0 * (double) M * (double) M;
-					// corr_flop += 2.0 * (double) hNVars[i] * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
-					// corr_flop += 4.0 * (double) hNVars[i] + 11;
+					corr_flop += 2.0 * (double) hNVars[i] * (double) M * (double) hNVars[i];
+					corr_flop += 2.0 * (double) M * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += (2.0 / 3.0) * (double) hNVars[i] * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += 2.0 * (double) M * (double) hNVars[i] + (double) M + 2.0 * (double) M * (double) M;
+					corr_flop += 2.0 * (double) hNVars[i] * (double) hNVars[i] + 2.0 * (double) hNVars[i] * (double) hNVars[i];
+					corr_flop += 4.0 * (double) hNVars[i] + 11;
 					completed[hact[i]] = 1;
 					completed_count++;
 					stepf << hact[i] << ", " << hStep[i] << "\n";
@@ -375,11 +375,11 @@ int main(int argc, char *argv[]) {
 					a1f << hact[i] << ", " << ha1[i] << "\n";
 					a2f << hact[i] << ", " << ha2[i] << "\n";
 					lambdaf << hact[i] << ", " << hlambda[i] << "\n";
-					// int hlVars[hNVars[i]];
-					// corr_precision hbeta[hNVars[i]];
-					// cudaMemcpy(hlVars, lVars + i * M, hNVars[i] * sizeof(int), cudaMemcpyDeviceToHost);
-					// cudaMemcpy(hbeta, corr_beta + i * M, hNVars[i] * sizeof(corr_precision), cudaMemcpyDeviceToHost);
-					// for (int j = 0; j < hNVars[i]; j++) betaf << hact[i] << ", " << hlVars[j] << ", " << hbeta[j] << "\n";
+					int hlVars[hNVars[i]];
+					corr_precision hbeta[hNVars[i]];
+					cudaMemcpy(hlVars, lVars + i * M, hNVars[i] * sizeof(int), cudaMemcpyDeviceToHost);
+					cudaMemcpy(hbeta, corr_beta + i * M, hNVars[i] * sizeof(corr_precision), cudaMemcpyDeviceToHost);
+					for (int j = 0; j < hNVars[i]; j++) betaf << hact[i] << ", " << hlVars[j] << ", " << hbeta[j] << "\n";
 				}
 			}
 

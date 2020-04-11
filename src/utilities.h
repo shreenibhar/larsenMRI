@@ -18,7 +18,7 @@ typedef float precision;
 typedef float corr_precision;
 
 #define inf 50000
-#define eps 1e-9
+#define eps 1e-6
 
 class IntegerTuple {
 public:

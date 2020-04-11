@@ -332,9 +332,7 @@ void computeSign_kernel(corr_precision *sb, precision *beta, precision *beta_pre
 		}
 		else {
 			sg = (beta[si] > eps) - (beta[si] < -eps);
-			if (sg == 0) {
-				sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
-			}
+			if (sg == 0) printf("Included active variable has 0 beta value!\n");
 		}
 		sb[ind] = (corr_precision) sg;
 	}
