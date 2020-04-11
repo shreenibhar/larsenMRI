@@ -51,8 +51,9 @@ float GpuTimer::elapsed() {
 template<typename T>
 IntegerTuple read_flat_mri(std::string path, T *&X, T *&Y) {
 	std::ifstream fp(path.c_str());
+	char hash;
 	int M, N;
-	fp >> M >> N;
+	fp >> hash >> M >> N;
 	
 	T *h_number = new T[M * N];
 	for (int i = 0; i < M; i++) {

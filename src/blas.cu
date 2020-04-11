@@ -3,31 +3,12 @@
 
 #include "blas.h"
 
-int next_pow2(int num) {
-	num--;
-	num |= num >> 1;
-	num |= num >> 2;
-	num |= num >> 4;
-	num |= num >> 8;
-	num |= num >> 16;
-	num++;
-	return num;
-}
-
 void gemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, float *alpha, float *A, int lda, float *B, int ldb, float *beta, float *C, int ldc) {
 	cublasSgemm(handle, transa, transb, m, n, k, (const float *)alpha, (const float *)A, lda, (const float *)B, ldb, (const float *)beta, C, ldc);
 }
 
 void gemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, double *alpha, double *A, int lda, double *B, int ldb, double *beta, double *C, int ldc) {
 	cublasDgemm(handle, transa, transb, m, n, k, (const double *)alpha, (const double *)A, lda, (const double *)B, ldb, (const double *)beta, C, ldc);
-}
-
-void gemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, float *alpha, float *Aarray[], int lda, float *Barray[], int ldb, float *beta, float *Carray[], int ldc, int batchCount) {
-	cublasSgemmBatched(handle, transa, transb, m, n, k, (const float *)alpha, (const float **)Aarray, lda, (const float **)Barray, ldb, (const float *)beta, Carray, ldc, batchCount);
-}
-
-void gemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, double *alpha, double *Aarray[], int lda, double *Barray[], int ldb, double *beta, double *Carray[], int ldc, int batchCount) {
-	cublasDgemmBatched(handle, transa, transb, m, n, k, (const double *)alpha, (const double **)Aarray, lda, (const double **)Barray, ldb, (const double *)beta, Carray, ldc, batchCount);
 }
 
 void gemv(cublasHandle_t handle, cublasOperation_t trans, int m, int n, float *alpha, float *A, int lda, float *x, int incx, float *beta, float *y, int incy) {

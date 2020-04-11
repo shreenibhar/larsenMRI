@@ -21,13 +21,13 @@ void lasso_add(precision *c, int *lasso, int *lVars, int *nVars, int *cidx, int 
 
 void gather(precision *XA, precision *XA1, precision *X, int *lVars, int ni, int lassoCond, int drop, int M, int N, int mod, cudaStream_t &stream);
 
-void checkNan(int *nVars, int *eVars, int *lVars, int *info, int *infomapper, precision *r, precision *d, precision *randnrm, int M, int numModels);
+void checkNan(int *nVars, int *eVars, int *lVars, int *info, precision *r, precision *d, precision *randnrm, int M, int numModels);
 
 void gammat(precision *gamma_tilde, precision *beta, precision *betaOls, int *dropidx, int *lVars, int *nVars, int *lasso, int M, int N, int numModels);
 
 void set_gamma(precision *gamma, precision *gamma_tilde, int *lasso, int *nVars, int maxVariables, int M, int numModels);
 
-void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int *info, int M, int N, int numModels, precision max_l1);
+void update(precision *beta, precision *beta_prev, precision *mu, precision *d, precision *betaOls, precision *gamma, precision **dXA, precision *y, precision *a1, precision *a2, precision *lambda, int *lVars, int *nVars, int *step, int M, int N, int numModels, precision max_l1);
 
 void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act, cudaStream_t &stream);
 
