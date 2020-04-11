@@ -240,7 +240,7 @@ endif
 # Target rules
 all: build
 
-build: multivariateLarsen
+build: multivariateLarsen multivariateLarsen_
 
 check.deps:
 ifeq ($(SAMPLE_ENABLED),0)
@@ -264,11 +264,20 @@ multivariateLarsen.o: ../src/multivariateLarsen.cu ../src/utilities.h ../src/ker
 multivariateLarsen: multivariateLarsen.o utilities.o kernels.o blas.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 
+blas_.o: ../src_/blas.cu ../src_/blas.h ../src_/headers.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+multivariateLarsen_.o: ../src_/multivariateLarsen.cu ../src_/utilities-inl.h ../src_/kernels-inl.h ../src_/blas.h ../src_/headers.h
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+multivariateLarsen_: multivariateLarsen_.o blas_.o
+	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+
 run: build
 	$(EXEC) ./multivariateLarsen
 
 clean:
-	rm -f multivariateLarsen
+	rm -f multivariateLarsen multivariateLarsen_
 	rm -f *.o
 
 clobber: clean
