@@ -31,7 +31,7 @@ void update(precision *beta, precision *beta_prev, precision *mu, precision *d, 
 
 void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act, cudaStream_t &stream);
 
-void computeSign(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int *dropidx, int *lasso, int ni, cudaStream_t &stream);
+void computeSign(corr_precision *sb, precision *beta, precision *beta_prev, int *lVars, int *dropidx, int *lasso, int *nVars, cudaStream_t &stream);
 
 void correct(corr_precision *beta, corr_precision *betaols, corr_precision *sb, corr_precision *y, corr_precision *yh, corr_precision *z, precision *a1, precision *a2, precision *lambda, corr_precision min_l2, corr_precision g, int ni, int M, cudaStream_t &stream);
 

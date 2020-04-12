@@ -266,20 +266,21 @@ int main(int argc, char *argv[]) {
 
 		if (ctrl) {
 			cudaMemcpy(hStep, step, numModels * sizeof(int), cudaMemcpyDeviceToHost);
-			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 			cudaMemcpy(hact, act, numModels * sizeof(int), cudaMemcpyDeviceToHost);
 
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					gatherAll(corr_XA[i], corr_y + i * M, cX, lVars + i * M, hNVars[i], M, N, hact[i], streams[s & (numStreams - 1)]);
+					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, dropidx + i, lasso + i, nVars + i, streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
 			cudaDeviceSynchronize();
 
+			cudaMemcpy(hNVars, nVars, numModels * sizeof(int), cudaMemcpyDeviceToHost);
+
 			for (int i = 0, s = 0; i < numModels; i++) {
 				if (hdone[i] && !completed[hact[i]]) {
-					computeSign(corr_sb + i * M, beta + i * N, beta_prev + i * N, lVars + i * M, dropidx + i, lasso + i, hNVars[i], streams[s & (numStreams - 1)]);
+					gatherAll(corr_XA[i], corr_y + i * M, cX, lVars + i * M, hNVars[i], M, N, hact[i], streams[s & (numStreams - 1)]);
 					s++;
 				}
 			}
