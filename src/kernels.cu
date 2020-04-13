@@ -136,9 +136,8 @@ void gather_add_kernel(precision *XA, precision *XA1, precision *X, int *lVars, 
 
 __global__
 void gather_del_kernel(precision *XA, precision *XA1, precision *X, int ni, int drop, int M, int N, int mod) {
-	int mj = threadIdx.x + blockIdx.x * blockDim.x;
-	int mi = mj / M;
-	mj -= mi * M;
+	int mi = blockIdx.x;
+	int mj = threadIdx.x;
 	mi += drop;
 	if (mi >= drop && mi < ni && mj < M) {
 		XA[mi * M + mj] = XA1[(mi + 1) * M + mj];
@@ -147,9 +146,8 @@ void gather_del_kernel(precision *XA, precision *XA1, precision *X, int ni, int 
 
 __global__
 void gather_cop_kernel(precision *XA, precision *XA1, precision *X, int ni, int drop, int M, int N, int mod) {
-	int mj = threadIdx.x + blockIdx.x * blockDim.x;
-	int mi = mj / M;
-	mj -= mi * M;
+	int mi = blockIdx.x;
+	int mj = threadIdx.x;
 	mi += drop;
 	if (mi >= drop && mi < ni && mj < M) {
 		XA1[mi * M + mj] = XA[mi * M + mj];
@@ -162,10 +160,8 @@ void gather(precision *XA, precision *XA1, precision *X, int *lVars, int ni, int
 	}
 	else {
 		if (ni == drop) return;
-		dim3 blockDim(min((ni - drop) * M, 1024));
-		dim3 gridDim(((ni - drop) * M + blockDim.x - 1) / blockDim.x);
-		gather_del_kernel<<<gridDim, blockDim, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
-		gather_cop_kernel<<<gridDim, blockDim, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
+		gather_del_kernel<<<ni - drop, M, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
+		gather_cop_kernel<<<ni - drop, M, 0, stream>>>(XA, XA1, X, ni, drop, M, N, mod);
 	}
 }
 
@@ -213,7 +209,7 @@ void gammat_kernel(precision *gamma_tilde, precision *beta, precision *betaOls, 
 		for (int i = 0; i < ni; i++) {
 			int si = lVars[mod * M + i];
 			precision val = beta[mod * N + si] / (beta[mod * N + si] - betaOls[mod * M + i]);
-			val = (val < eps)? inf: val;
+			val = ((double) val < (double) eps)? inf: val;
 			if (val < miner) {
 				miner = val;
 				id = i;
@@ -268,7 +264,7 @@ void update_kernel(precision *beta, precision *beta_prev, precision *mu, precisi
 			precision betaOls_val = betaOls[mod * M + i];
 			beta_prev[mod * N + si] = beta_val;
 			beta[mod * N + si] = beta_val + gamma_val * (betaOls_val - beta_val);
-			si = (beta_val > eps) - (beta_val < -eps);
+			si = ((double) beta_val > (double) eps) - ((double) beta_val < (double) -eps);
 			l1_prev += abs(beta_val);
 			delta += si * (betaOls_val - beta_val);
 			l1 += abs(beta_val + gamma_val * (betaOls_val - beta_val));
@@ -304,21 +300,18 @@ void update(precision *beta, precision *beta_prev, precision *mu, precision *d, 
 
 __global__
 void gatherAll_kernel(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act) {
-	int ind = threadIdx.x + blockIdx.x * blockDim.x;
-	int nind = ind / M;
-	ind -= nind * M;
-	if (nind < ni && ind < M) {
-		if (nind == 0) {
-			y[ind] = X[ind * N + act];
+	int mi = blockIdx.x;
+	int mj = threadIdx.x;
+	if (mi < ni && mj < M) {
+		XA[mi * M + mj] = X[mj * N + lVars[mi]];
+		if (mi == 0) {
+			y[mj] = X[mj * N + act];
 		}
-		XA[nind * M + ind] = X[ind * N + lVars[nind]];
 	}
 }
 
 void gatherAll(corr_precision *XA, corr_precision *y, corr_precision *X, int *lVars, int ni, int M, int N, int act, cudaStream_t &stream) {
-	dim3 blockDim(1024);
-	dim3 gridDim((ni * M + blockDim.x - 1) / blockDim.x);
-	gatherAll_kernel<<<gridDim, blockDim, 0, stream>>>(XA, y, X, lVars, ni, M, N, act);
+	gatherAll_kernel<<<ni, M, 0, stream>>>(XA, y, X, lVars, ni, M, N, act);
 }
 
 __global__
@@ -328,9 +321,9 @@ void computeSign_kernel(corr_precision *sb, precision *beta, precision *beta_pre
 	int active_size = 0;
 	for (int i = 0; i < ni; i++) {
 		int si = lVars[i];
-		int sg = (beta[si] > eps) - (beta[si] < -eps);
+		int sg = ((double) beta[si] > (double) eps) - ((double) beta[si] < (double) -eps);
 		if (lasso_cond && i == drop_ind) {
-			sg = (beta_prev[si] > eps) - (beta_prev[si] < -eps);
+			sg = ((double) beta_prev[si] > (double) eps) - ((double) beta_prev[si] < (double) -eps);
 		}
 		if (sg != 0) {
 			sb[active_size] = (corr_precision) sg;

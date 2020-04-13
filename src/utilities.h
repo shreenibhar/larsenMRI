@@ -18,7 +18,7 @@ typedef float precision;
 typedef float corr_precision;
 
 #define inf 50000
-#define eps 1e-6
+#define eps 1e-9
 
 class IntegerTuple {
 public:
@@ -51,6 +51,6 @@ void range(int *&ind, int st, int ed);
 template<typename T>
 void init_var(T *&var, int size);
 
-void cudaErrorFlush();
+int cudaErrorFlush();
 
 #endif

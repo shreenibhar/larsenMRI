@@ -127,10 +127,11 @@ template void init_var<int>(int *&var, int size);
 template void init_var<float>(float *&var, int size);
 template void init_var<double>(double *&var, int size);
 
-void cudaErrorFlush() {
+int cudaErrorFlush() {
 	cudaDeviceSynchronize();
 	cudaError_t error = cudaGetLastError();
 	printf("Cuda Error (%s): %s\n", cudaGetErrorName(error), cudaGetErrorString(error));
+	return (int) error;
 }
 
 #endif
